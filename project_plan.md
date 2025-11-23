@@ -3,14 +3,16 @@
 ## Objective
 To determine the optimal combination of vector encoding scheme (Cartesian vs. Octahedral) and dithering algorithm (Blue Noise vs. IGN) for maximizing perceptual quality (SSIM/FLIP) within strict G-Buffer Bit Budgets, focusing specifically on static frame reconstruction accuracy rather than temporal stability.
 
-Specifically, this paper aims to validate if **12-bit Octahedral encoding with Jacobian-Weighted dithering** can replace standard 16-bit Cartesian encoding. We aim to prove that modulating noise amplitude based on geometric distortion allows us to free up 4 bits of memory per pixel without visible degradation in specular highlights.
+Specifically, this paper aims to validate if **12-bit Octahedral encoding with Distortion-Weighted dithering** can replace standard 16-bit Cartesian encoding. We aim to compare an Analytical Jacobian weighting strategy against a Heuristic approximation to determine if the computational cost of exact derivatives is necessary to prevent "sparkling" artifacts, or if a low-ALU proxy suffices. We aim to prove that modulating noise amplitude based on geometric distortion allows us to free up 4 bits of memory per pixel without visible degradation in specular highlights.
 
 ## Context & Terms
 * **Normal Map:** A texture determining surface angle.
 * **G-Buffer Quantization:** The process of packing geometric data into low-bit-depth containers to save memory bandwidth.
 * **Octahedral Encoding:** A method of mapping a 3D unit sphere onto a 2D square grid. It is area-preserving but introduces variable geometric distortion (non-uniform density) at the poles.
 * **Dithering:** Injecting noise prior to quantization to convert "banding artifacts" into "fuzz."
-* **Jacobian Weighting:** A novel approach where dithering amplitude is scaled by the inverse of the projection's derivative. This prevents noise from "sparkling" in regions where the Octahedral map is highly sensitive to small UV changes.
+* **Adaptive Dithering Weighting**: A technique where noise amplitude is scaled inversely to geometric distortion. We investigate two sub-types:
+    * **Analytical Jacobian**: Scaling based on the precise partial derivatives of the projection function.
+    * **Heuristic Proxy**: Scaling based on surface normal components (e.g., ∣N.z∣) to approximate distortion zones with minimal ALU overhead.
 
 ## The "Epsilon" (The Innovation)
 **Current industry standards** often rely on 24-bit precision (Standard RGB8) or 16-bit approximations (R5G6B5) for normal maps.
@@ -52,8 +54,14 @@ Justification for Screen-Space: While this approach introduces a "Shower Door" e
     * *Note:* We acknowledge that IGN is optimized for Temporal Anti-Aliasing (TAA). In our static benchmarks, IGN may score lower than Blue Noise due to its high-frequency "checkerboard" pattern. This is a noted trade-off: we accept lower static SSIM for the benefit of ALU-only performance.
 
 **B. Amplitude Logic (The New Variable)**
-* **Uniform:** Constant noise amplitude $\xi$ applied across the entire UV map.
-* **Jacobian-Weighted:** Noise amplitude is dynamically scaled: $\xi_{final} = \xi \cdot \frac{1}{1 + ||\partial N / \partial UV||}$. This dampens noise at the poles to prevent "hot pixels."
+We test three levels of mathematical precision for the noise scaling factor $w$:
+* **Control (Uniform):** Constant noise amplitude ξ applied across the entire UV map ($w$=1.0).
+* **Analytical Jacobian**: $w$ is calculated using the explicit partial derivatives of the Octahedral projection. The noise is scaled by the determinant of the Jacobian matrix J, ensuring noise density is mathematically normalized relative to surface area:
+$$ w=\frac{1}{\sqrt{det(J^TJ)}}​ $$
+* **Heuristic Approximation**: $w$ is calculated using a low-cost proxy based on the "fold" region of the Octahedral map, approximated by the Z-component of the normal.
+$$ w=smoothstep(0.0,ϵ,|N.z|) $$
+
+*Hypothesis: We expect this to approximate the Analytical result at <10% of the ALU cost.*
 
 ### 3. Rotational Stress Test
 To ensure we capture artifacts at the "poles" and "diagonals" of the Octahedral map, the test sphere will rotate relative to the light source. 
@@ -69,10 +77,11 @@ Once the images are exported, we will use Python scripts and CLI tools to genera
     $$\theta = \arccos(N_{gt} \cdot N_{rec})$$
     This allows us to visualize if the **Weighted** dithering successfully reduces the anisotropic stretching errors along the diagonals compared to **Uniform** dithering.
 * **Specular Luminance Delta:** While Angular Error measures the vector difference, it does not account for visual impact. We will compute the per-pixel luminance difference specifically within the specular lobe region: $ΔL=∣L_{GroundTruth}​ − L_{target}​∣$. This differentiates between a normal vector error in a shadow (invisible) vs. a highlight (highly visible).
+* **Shader Complexity (Instruction Count)**: We will compile both the Analytical and Heuristic shaders to SPIR-V/ISA to compare the instruction count and register pressure. This quantifies the "cost" of the precision gained by the Analytical method.
 
 ## Hypothesis
 1.  **The Weighting Correction:** We hypothesize that **Target A (12-bit) + Uniform Dithering** will fail at the poles (manifesting as distinct banding in the specular highlight), whereas **Target A + Jacobian-Weighted Dithering** will smooth these artifacts, achieving parity with the 16-bit Baseline.
-2.  **The Efficiency Victory:** The 12-bit Weighted Octahedral method will achieve an SSIM score >0.98. This confirms that smart math (Jacobian attenuation) allows us to "buy back" the precision lost by discarding 4 bits.
+2.  **The Efficiency Victory:** The 12-bit Weighted Octahedral method will achieve an SSIM score >0.98. This confirms that smart math (Jacobian attenuation) allows us to "buy back" the precision lost by discarding 4 bits. We also hypothesize that the Heuristic Approximation will achieve an SSIM score within 0.5% of the Analytical Jacobian while requiring significantly fewer GPU cycles. This would prove that for real-time rendering, exact derivative calculation is unnecessary, and simple Z-based damping is sufficient to hide quantization artifacts.
 3.  **The IGN Trade-off:** While Blue Noise will yield the highest static SSIM, IGN will perform within an acceptable margin for real-time applications. We predict the visual difference between IGN and Blue Noise will be negligible once Jacobian Weighting is applied, as the weighting suppresses the worst-case noise pixels.
 
 ## Expected Deliverables
