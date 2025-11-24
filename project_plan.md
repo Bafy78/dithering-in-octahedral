@@ -18,12 +18,14 @@ Specifically, this paper aims to validate if **12-bit Octahedral encoding with D
     * **Analytical Jacobian**: Scaling based on the precise partial derivatives of the projection function.
     * **Heuristic Proxy**: Scaling based on surface normal components (e.g., ∣N.z∣) to approximate distortion zones with minimal ALU overhead.
 * **Z-Reconstruction**: The standard optimization of storing only the X and Y components of the normal vector and deriving Z mathematically ($z=\sqrt{1−x^2−y^2​}$), assuming unit length.
+* **Precise Encoding (octP)**: An optimization where the encoder searches the four nearest grid points to find the one with minimal angular error. While this reduces mathematical error, it does not increase the available bit resolution, meaning quantization steps (banding) remain visible in low-bit-depth scenarios.
 
 
 ## The "Epsilon" (The Innovation)
 **Current industry standards** typically rely on 16-bit RG8 precision (8 bits per axis) for normal maps. Reducing this to 12 bits (6 bits per axis) traditionally results in visible quantization banding.
 
-**The Gap:** Current research often ignores the interplay between procedural noise and geometric projection distortion. Uniform dithering applied to an Octahedral map results in non-uniform noise in 3D space—causing visual "sparkling" at the poles where the map density is highest.
+**The Gap:** While noise injection (dithering) is a standard technique to mitigate quantization banding (e.g., Crytek, Meyer et al.), current implementations universally apply uniform noise amplitude across the texture map. This ignores the variable pixel density of Octahedral encoding. Because the projection is area-preserving but not angle-preserving, uniform 2D noise manifests as anisotropic, non-uniform noise in 3D view space, causing excessive 'sparkling' artifacts at the poles where the sampling density is highest.
+Furthermore, while exhaustive search methods like 'Precise Encoding' minimize angular error, they incur a high ALU cost (approx. 5x standard encoding) and fail to address the visual banding inherent to low-bit-depth containers. Precise quantization aligns the bands, but Dithering eliminates them.
 
 **The Contribution:** We advance beyond subjective visual inspection to a rigorous quantitative efficiency analysis. We introduce **Jacobian-Weighted Dithering** as a mechanism to normalize noise perception. We aim to prove that this technique allows for 25% memory compression (16-bit → 12-bit) using Hemispherical Octahedral encoding while maintaining an SSIM score >0.98.
 
@@ -37,6 +39,7 @@ To ensure a fair "apples-to-apples" comparison, we will test against specific ha
 | **Target A** | 14-bit | Hemi-Oct (7-7) | The "safe" optimization. |
 | **Target B** | 12-bit | Hemi-Oct (6-6) | The "Hero" Case. Uses 6 bits for U / 6 bits for V. Leaves 4 bits free in a 16-bit container. |
 | **Target C** | 10-bit | Hemi-Oct (5-5) | The "Stress Test." Extreme compression to see where the method breaks. |
+| **Target P** | 12-bit | Hemi-Oct Precise | The "Math" Case. Uses octP search without dithering. Used to prove that lower angular error does not necessarily equal better visual quality. |
 
 *Note on Quantization Noise: We acknowledge that at Target B (12-bit), the angular quantization step (≈2.8∘) requires a dithering noise amplitude that may negatively impact raw single-frame SSIM scores. To account for this, we differentiate between Signal Accuracy (Single Frame) and Perceptual Convergence (Accumulated).*
 
@@ -99,7 +102,7 @@ Once the images are exported, we will use Python scripts and CLI tools to genera
 1.  **The Weighting Correction:** We hypothesize that **Target B (12-bit) + Uniform Dithering** will fail at the poles (manifesting as distinct banding in the specular highlight), whereas **Target B + Jacobian-Weighted Dithering** will smooth these artifacts, achieving parity with the 16-bit Baseline.
 2.  **The Efficiency Victory:** We anticipate that while Raw 12-bit frames may show high variance, the Accumulated 12-bit Weighted Octahedral method will achieve an SSIM score >0.98. This confirms that analytical Jacobian attenuation allows us to recover the perceptual precision lost by discarding 4 bits. We also hypothesize that the Heuristic Approximation will achieve an SSIM score within 0.5% of the Analytical Jacobian while requiring significantly fewer GPU cycles. This would prove that for real-time rendering, exact derivative calculation is unnecessary, and simple Z-based damping is sufficient to hide quantization artifacts.
 3.  **The IGN Trade-off:** While Blue Noise will yield the highest static SSIM, IGN will perform within an acceptable margin for real-time applications. We predict the visual difference between IGN and Blue Noise will be negligible once Jacobian Weighting is applied, as the weighting suppresses the worst-case noise pixels.
-
+4. **The Precision vs. Perception Divergence**: We hypothesize that Target P (12-bit Precise) will yield the lowest Mean Squared Error (MSE) but will score lower on FLIP (Perceptual Error) than Target B (Jacobian Dithered). This will demonstrate that in memory-constrained G-Buffers, noise-based error masking is perceptually superior to analytical error minimization.
 
 ## Expected Deliverables
 1.  **Efficiency Curve:** A graph plotting Bit-Depth (X-axis) vs. SSIM Score (Y-axis).
