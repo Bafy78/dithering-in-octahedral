@@ -3,7 +3,7 @@
 ## Objective
 To determine the optimal combination of vector encoding scheme (Cartesian vs. Octahedral) and dithering algorithm (Blue Noise vs. IGN) for maximizing perceptual quality (SSIM/FLIP) within strict G-Buffer Bit Budgets, focusing specifically on static frame reconstruction accuracy rather than temporal stability.
 
-Specifically, this paper aims to validate if **12-bit Octahedral encoding with Distortion-Weighted dithering** can replace standard 16-bit Cartesian encoding. We aim to compare an Analytical Jacobian weighting strategy against a Heuristic approximation to determine if the computational cost of exact derivatives is necessary to prevent "sparkling" artifacts, or if a low-ALU proxy suffices. We aim to prove that modulating noise amplitude based on geometric distortion allows us to free up 4 bits of memory per pixel without visible degradation in specular highlights.
+Specifically, this paper aims to validate if **12-bit Octahedral encoding with Distortion-Weighted dithering** can replace standard 16-bit Cartesian encoding (RG8). We aim to compare an Analytical Jacobian weighting strategy against a Heuristic approximation to determine if the computational cost of exact derivatives is necessary to prevent "sparkling" artifacts, or if a low-ALU proxy suffices. We aim to prove that modulating noise amplitude based on geometric distortion allows us to free up 4 bits of memory per pixel without visible degradation in specular highlights.
 
 ## Context & Terms
 * **Normal Map:** A texture determining surface angle.
@@ -13,9 +13,10 @@ Specifically, this paper aims to validate if **12-bit Octahedral encoding with D
 * **Adaptive Dithering Weighting**: A technique where noise amplitude is scaled inversely to geometric distortion. We investigate two sub-types:
     * **Analytical Jacobian**: Scaling based on the precise partial derivatives of the projection function.
     * **Heuristic Proxy**: Scaling based on surface normal components (e.g., ∣N.z∣) to approximate distortion zones with minimal ALU overhead.
+* **Z-Reconstruction**: The standard optimization of storing only the X and Y components of the normal vector and deriving Z mathematically ($z=\sqrt{1−x^2−y^2​}$), assuming unit length.
 
 ## The "Epsilon" (The Innovation)
-**Current industry standards** often rely on 24-bit precision (Standard RGB8) or 16-bit approximations (R5G6B5) for normal maps.
+**Current industry standards** typically rely on 16-bit RG8 precision (8 bits per axis) for normal maps. Reducing this to 12 bits (6 bits per axis) traditionally results in visible quantization banding.
 
 **The Gap:** Current research often ignores the interplay between procedural noise and geometric projection distortion. Uniform dithering applied to an Octahedral map results in non-uniform noise in 3D space—causing visual "sparkling" at the poles where the map density is highest.
 
@@ -27,7 +28,7 @@ To ensure a fair "apples-to-apples" comparison, we will test against specific ha
 | Category | Total Bits | Format | Description |
 | :--- | :--- | :--- | :--- |
 | **Control** | 32-bit | Float32 | The "Ground Truth" (Infinite Precision). |
-| **Baseline** | 16-bit | Cartesian (5-6-5) | The standard low-precision approach. No encoding, just quantization. |
+| **Baseline** | 16-bit | Cartesian (RG8) | The Industry Standard. 8 bits X / 8 bits Y. Z is reconstructed. |
 | **Target A** | 12-bit | Octahedral (6-6) | The "Hero" Case. Uses 6 bits for U / 6 bits for V. Leaves 4 bits free in a 16-bit container. |
 | **Target B** | 10-bit | Octahedral (5-5) | The "Stress Test." Extreme compression to see where the method breaks. |
 
@@ -35,7 +36,7 @@ To ensure a fair "apples-to-apples" comparison, we will test against specific ha
 
 ### 1. The Pipeline
 We will implement a two-branch rendering pipeline in WebGPU/Three.js:
-* **Path A (Baseline):** Normal → Quantize to R5G6B5 → Render.
+* **Path A (Baseline):** Normal → Quantize X/Y to 8-bit (RG8) → Reconstruct Z → Render.
 * **Path B (Optimized):** Normal → Encode Octahedral (U,V) → **Calculate Jacobian Weight ($w$)** → Generate Noise → Scale Noise by $w$ → Add to UV → Quantize to n-bits → Decode Render.
 
 **Data Capture:** The application will render specific rotational frames and export them as Lossless PNGs to separate real-time performance from image quality analysis.
