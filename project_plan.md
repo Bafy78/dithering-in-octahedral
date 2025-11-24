@@ -1,11 +1,11 @@
 # Perceptual Efficiency of Jacobian-Weighted Dithering on Octahedral-Encoded Normal Maps
 
 ## Objective
-To determine the optimal combination of vector encoding scheme (Cartesian vs. Octahedral) and dithering algorithm (Bayer vs Blue Noise vs. IGN) for maximizing perceptual quality (SSIM/FLIP) within strict G-Buffer Bit Budgets, focusing specifically on static frame reconstruction accuracy rather than temporal stability.
+To determine the optimal combination of vector encoding scheme (Cartesian vs. Octahedral) and dithering algorithm (Bayer vs Blue Noise vs. IGN) for maximizing perceptual quality (SSIM/FLIP) within strict G-Buffer Bit Budgets, focusing specifically on single-frame perceptual fidelity (mitigating low-frequency banding) rather than raw signal-to-noise ratio.
 
 While existing surveys compare 16-bit Cartesian to 16-bit Octahedral, this comparison is effectively solved: Octahedral is mathematically superior. The open research question is: How much 'slack' does the superior distribution of Octahedral encoding provide? Can we cash in that efficiency to reduce the bit budget?
 
-Specifically, this paper aims to validate if **12-bit Octahedral encoding with Distortion-Weighted dithering** can replace standard 16-bit Cartesian encoding (RG8). This study compares an Analytical Jacobian weighting strategy against a Heuristic approximation to determine if the computational cost of exact derivatives is necessary to mitigate high-frequency aliasing artifacts, or if a low-ALU proxy suffices. We aim to prove that modulating noise amplitude based on geometric distortion allows us to free up 4 bits of memory per pixel without visible degradation in specular highlights.
+Specifically, this paper aims to validate if **12-bit Octahedral encoding with Distortion-Weighted dithering** can replace standard 16-bit Cartesian encoding (RG8). This study compares an Analytical Jacobian weighting strategy against a Heuristic approximation to determine if the computational cost of exact derivatives is necessary to mitigate high-frequency aliasing artifacts, or if a low-ALU proxy suffices. We aim to prove that modulating noise amplitude based on geometric distortion allows us to free up 4 bits of memory per pixel converting objectionable quantization artifacts into perceptually acceptable high-frequency noise.
 
 
 ## Context & Terms
@@ -57,13 +57,13 @@ We will implement a two-branch rendering pipeline in WebGPU/Three.js:
 We test the resilience of the bit budgets against different noise types and weighting strategies.
 
 **A. Noise Injection Strategy**
-To prevent geometric distortion from warping the noise patterns, all noise generation is seeded by Screen-Space Coordinates (gl_FragCoord.xy).
+To prevent geometric distortion from warping the noise patterns, all noise generation is seeded by Screen-Space Coordinates (gl_FragCoord.xy) combined with a per-frame jitter index (t).
 
 Justification for Screen-Space: While this approach introduces a "Shower Door" effect (view-dependent noise) during motion, it is the standard implementation for G-Buffer dithering as it ensures consistent noise frequency regardless of object distance. We assume a production pipeline would rely on TAA (Temporal Anti-Aliasing) to integrate this noise over multiple frames; therefore, we prioritize screen-space consistency over object-space coherence.
 
 Validation of Temporal Stability: While our primary focus is static frame accuracy, the high amplitude of noise required for 6-bit encoding risks dominating perceptual error metrics (FLIP/SSIM). Therefore, for Targets B and C, we will generate two sets of capture data:
-* **Raw Frame**: To analyze the immediate Jacobian weighting distribution.
-* **Accumulated Frame**: A simple 8-frame accumulation buffer (averaging samples over time) to simulate a standard TAA resolve. Justification: This allows us to measure the "Converged Surface Quality" separately from the "Dithering Noise Floor." If the accumulated frame achieves High SSIM while the Raw frame has Low SSIM, the dithering strategy is successful.
+* **Raw Frame**: While modern pipelines rely on TAA, analyzing the Static Frame is critical to ensure the dithering noise floor does not exceed the perceptual threshold. We treat the Static Frame as a 'Worst Case Scenario' (e.g., rapid camera movement where TAA fails). If the Jacobian-Weighted Dithering is perceptually acceptable in a static frame, it is guaranteed to be stable under TAA.
+* **Accumulated Frame**: A simple 8-frame accumulation buffer (averaging samples over time) to simulate a standard TAA resolve. During this capture, the noise generator will cycle through 8 distinct phases (Blue Noise offsets or IGN time-seeds) while the camera remains static, ensuring the accumulation mathematically converges the dithering noise to zero. This allows us to measure the "Converged Surface Quality" separately from the "Dithering Noise Floor." If the accumulated frame achieves High SSIM while the Raw frame has Low SSIM, the dithering strategy is successful.
 
 We will try the following noises:
 * **Bayer:** Ordered Dithering (Grid-like, screen-aligned).
@@ -102,7 +102,7 @@ Once the images are exported, we will use Python scripts and CLI tools to genera
 1.  **The Weighting Correction:** We hypothesize that **Target B (12-bit) + Uniform Dithering** will fail at the poles (manifesting as distinct banding in the specular highlight), whereas **Target B + Jacobian-Weighted Dithering** will smooth these artifacts, achieving parity with the 16-bit Baseline.
 2.  **The Efficiency Victory:** We anticipate that while Raw 12-bit frames may show high variance, the Accumulated 12-bit Weighted Octahedral method will achieve an SSIM score >0.98. This confirms that analytical Jacobian attenuation allows us to recover the perceptual precision lost by discarding 4 bits. We also hypothesize that the Heuristic Approximation will achieve an SSIM score within 0.5% of the Analytical Jacobian while requiring significantly fewer GPU cycles. This would prove that for real-time rendering, exact derivative calculation is unnecessary, and simple Z-based damping is sufficient to hide quantization artifacts.
 3.  **The IGN Trade-off:** While Blue Noise will yield the highest static SSIM, IGN will perform within an acceptable margin for real-time applications. We predict the visual difference between IGN and Blue Noise will be negligible once Jacobian Weighting is applied, as the weighting suppresses the worst-case noise pixels.
-4. **The Precision vs. Perception Divergence**: We hypothesize that Target P (12-bit Precise) will yield the lowest Mean Squared Error (MSE) but will score lower on FLIP (Perceptual Error) than Target B (Jacobian Dithered). This will demonstrate that in memory-constrained G-Buffers, noise-based error masking is perceptually superior to analytical error minimization.
+4. **The Precision vs. Perception Divergence**: We hypothesize that while Target P (12-bit Precise) would get the lowest Mean Squared Error (MSE), it will score lower on FLIP (Perceptual Error) than Target B (Jacobian Dithered). This will demonstrate that in memory-constrained G-Buffers, noise-based error masking is perceptually superior to analytical error minimization.
 
 ## Expected Deliverables
 1.  **Efficiency Curve:** A graph plotting Bit-Depth (X-axis) vs. SSIM Score (Y-axis).
