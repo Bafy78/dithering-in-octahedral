@@ -38,6 +38,9 @@ To ensure a fair "apples-to-apples" comparison, we will test against specific ha
 | **Target B** | 12-bit | Hemi-Oct (6-6) | The "Hero" Case. Uses 6 bits for U / 6 bits for V. Leaves 4 bits free in a 16-bit container. |
 | **Target C** | 10-bit | Hemi-Oct (5-5) | The "Stress Test." Extreme compression to see where the method breaks. |
 
+*Note on Quantization Noise: We acknowledge that at Target B (12-bit), the angular quantization step (≈2.8∘) requires a dithering noise amplitude that may negatively impact raw single-frame SSIM scores. To account for this, we differentiate between Signal Accuracy (Single Frame) and Perceptual Convergence (Accumulated).*
+
+
 ## Execution Plan (The Virtual Lab)
 
 ### 1. The Pipeline
@@ -55,6 +58,11 @@ To prevent geometric distortion from warping the noise patterns, all noise gener
 
 Justification for Screen-Space: While this approach introduces a "Shower Door" effect (view-dependent noise) during motion, it is the standard implementation for G-Buffer dithering as it ensures consistent noise frequency regardless of object distance. We assume a production pipeline would rely on TAA (Temporal Anti-Aliasing) to integrate this noise over multiple frames; therefore, we prioritize screen-space consistency over object-space coherence.
 
+Validation of Temporal Stability: While our primary focus is static frame accuracy, the high amplitude of noise required for 6-bit encoding risks dominating perceptual error metrics (FLIP/SSIM). Therefore, for Targets B and C, we will generate two sets of capture data:
+* **Raw Frame**: To analyze the immediate Jacobian weighting distribution.
+* **Accumulated Frame**: A simple 8-frame accumulation buffer (averaging samples over time) to simulate a standard TAA resolve. Justification: This allows us to measure the "Converged Surface Quality" separately from the "Dithering Noise Floor." If the accumulated frame achieves High SSIM while the Raw frame has Low SSIM, the dithering strategy is successful.
+
+We will try the following noises:
 * **Bayer:** Ordered Dithering (Grid-like, screen-aligned).
 * **Blue Noise:** Pre-computed Texture (High quality, memory cost).
 * **IGN (Interleaved Gradient Noise):** Algebraic (High speed, ALU-only).
@@ -79,17 +87,19 @@ To ensure the 'BRDF amplification' of quantization errors is captured, Surface R
 ### 4. Metrics
 Once the images are exported, we will use Python scripts and CLI tools to generate the error metrics:
 * **FLIP (NVIDIA):** We will run the official FLIP tool to generate Perceptual Error Maps. We will specifically look for "fireflies" (high-contrast error dots) which indicate failed dithering at the poles.
-* **SSIM (Structural Similarity):** Computed via Python (Scikit-Image) to measure global structural consistency against the Ground Truth.
+* **SSIM (Structural Similarity):** Computed via Python (Scikit-Image) on both Raw and Accumulated frames to measure global structural consistency against the Ground Truth.
 * **Angular Error Heatmap:** We will compute the angle $\theta$ between the ground truth vector $N_{gt}$ and the reconstructed vector $N_{rec}$:
     $$\theta = \arccos(N_{gt} \cdot N_{rec})$$
     This allows us to visualize if the **Weighted** dithering successfully reduces the anisotropic stretching errors along the diagonals compared to **Uniform** dithering.
 * **Specular Luminance Delta:** While Angular Error measures the vector difference, it does not account for visual impact. We will compute the per-pixel luminance difference specifically within the specular lobe region: $ΔL=∣L_{GroundTruth}​ − L_{target}​∣$. This differentiates between a normal vector error in a shadow (invisible) vs. a highlight (highly visible).
 * **Shader Complexity (Instruction Count)**: We will compile both the Analytical and Heuristic shaders to SPIR-V/ISA to compare the instruction count and register pressure. This quantifies the "cost" of the precision gained by the Analytical method.
 
+
 ## Hypothesis
 1.  **The Weighting Correction:** We hypothesize that **Target B (12-bit) + Uniform Dithering** will fail at the poles (manifesting as distinct banding in the specular highlight), whereas **Target B + Jacobian-Weighted Dithering** will smooth these artifacts, achieving parity with the 16-bit Baseline.
-2.  **The Efficiency Victory:** The 12-bit Weighted Octahedral method will achieve an SSIM score >0.98. This confirms that analytical Jacobian attenuation allows us to recover the perceptual precision lost by discarding 4 bits. We also hypothesize that the Heuristic Approximation will achieve an SSIM score within 0.5% of the Analytical Jacobian while requiring significantly fewer GPU cycles. This would prove that for real-time rendering, exact derivative calculation is unnecessary, and simple Z-based damping is sufficient to hide quantization artifacts.
+2.  **The Efficiency Victory:** We anticipate that while Raw 12-bit frames may show high variance, the Accumulated 12-bit Weighted Octahedral method will achieve an SSIM score >0.98. This confirms that analytical Jacobian attenuation allows us to recover the perceptual precision lost by discarding 4 bits. We also hypothesize that the Heuristic Approximation will achieve an SSIM score within 0.5% of the Analytical Jacobian while requiring significantly fewer GPU cycles. This would prove that for real-time rendering, exact derivative calculation is unnecessary, and simple Z-based damping is sufficient to hide quantization artifacts.
 3.  **The IGN Trade-off:** While Blue Noise will yield the highest static SSIM, IGN will perform within an acceptable margin for real-time applications. We predict the visual difference between IGN and Blue Noise will be negligible once Jacobian Weighting is applied, as the weighting suppresses the worst-case noise pixels.
+
 
 ## Expected Deliverables
 1.  **Efficiency Curve:** A graph plotting Bit-Depth (X-axis) vs. SSIM Score (Y-axis).
