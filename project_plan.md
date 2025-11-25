@@ -29,6 +29,13 @@ Furthermore, while exhaustive search methods like 'Precise Encoding' minimize an
 
 **The Contribution:** We advance beyond subjective visual inspection to a rigorous quantitative efficiency analysis. We introduce **Jacobian-Weighted Dithering** as a mechanism to normalize noise perception. We aim to prove that this technique allows for 25% memory compression (16-bit → 12-bit) using Hemispherical Octahedral encoding while maintaining an SSIM score >0.98.
 
+
+## Assumptions to Verify
+
+Before commencing the experimental phase, we must validate the mathematical premises via Python simulation (using SymPy/NumPy). If these assumptions fail, the proposed Jacobian weighting strategy must be adjusted, for example from an Area-based metric (Determinant) to an Angular-based metric (Singular Values).
+The assumptions are described in `Assumptions.md`
+
+
 ## Experimental Constraints: The Bit Budgets
 To ensure a fair "apples-to-apples" comparison, we will test against specific hardware-relevant configurations:
 
