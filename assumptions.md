@@ -10,15 +10,12 @@ Consequently, the proposed weighting formula w=1/det(JTJ)​ will evaluate to 1.
 Implication: If true, "Density" is not the problem—Shape (Anisotropy) is. We would need to switch the weighting strategy to correct for the Condition Number of the Jacobian (maximum stretch direction) rather than the Determinant.
 
 
-### 2. The Isotropic Noise Fallacy
+### 2. Scalar Noise Sufficiency is Invalid (The Anisotropy Premise)
+**The Premise:** We assume that Hemi-Octahedral encoding introduces significant **anisotropic distortion**, rendering simple scalar noise weighting ($w$) insufficient for high-fidelity reconstruction.
 
-Assumption: The plan implies that scaling the noise amplitude uniformly (scalar w) is sufficient to hide quantization. The Risk: Octahedral distortion is highly anisotropic. At the "diagonals" of the UV map (which map to the sphere's equator edges), the texels are not just smaller/larger; they are squashed.
+**The Logic:** While Octahedral encoding is area-preserving, it is not angle-preserving (conformal). Simulation data confirms that at the "diagonals" of the UV map, grid cells are not merely scaled; they are deformed into rectangles with aspect ratios exceeding 2:1.
 
-A scalar weight w scales noise equally in U and V.
-
-However, the distortion might stretch U much more than V (or vice versa) depending on the quadrant.
-
-Implication: Scalar noise scaling might fix the "loudness" of the noise but fail to match the "shape" of the quantization bands. We may need Anisotropic Dithering (scaling noise U and noise V separately).
+**The Implication:** Applying uniform (scalar) noise in Texture Space results in "streaked" or elongated noise artifacts when projected into View Space. To achieve perceptual uniformity, the dithering algorithm must employ **Vector-Weighted Dithering**. We must calculate distinct scaling factors for the U and V axes ($w_u, w_v$) derived from the partial derivatives of the projection (the Jacobian) to ensure the noise footprint remains circular (isotropic) on the sphere's surface.
 
 ### 3. The "Equivalent Precision" Math
 

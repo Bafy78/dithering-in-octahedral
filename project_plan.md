@@ -1,4 +1,4 @@
-# Perceptual Efficiency of Jacobian-Weighted Dithering on Octahedral-Encoded Normal Maps
+# Perceptual Efficiency of Anisotropic Jacobian-Weighted Dithering on Octahedral-Encoded Normal Maps
 
 ## Objective
 To determine the optimal combination of vector encoding scheme (Cartesian vs. Octahedral) and dithering algorithm (Bayer vs Blue Noise vs. IGN) for maximizing perceptual quality (SSIM/FLIP) within strict G-Buffer Bit Budgets, focusing specifically on single-frame perceptual fidelity (mitigating low-frequency banding) rather than raw signal-to-noise ratio.
@@ -15,7 +15,7 @@ Specifically, this paper aims to validate if **12-bit Octahedral encoding with D
     * **Hemispherical Octahedral (Hemi-Oct)**: A variant of Octahedral encoding optimized for View Space G-Buffers. It isolates the central "front-facing" diamond of the map and scales it to fill the $[0,1]^2$ texture space, doubling the precision density compared to standard Octahedral.
 * **Dithering:** Injecting noise prior to quantization to convert low-frequency quantization banding into high-frequency noise.
 * **Adaptive Dithering Weighting**: A technique where noise amplitude is scaled inversely to geometric distortion. We investigate two sub-types:
-    * **Analytical Jacobian**: Scaling based on the precise partial derivatives of the projection function.
+    * **Anisotropic Jacobian Dithering**: A technique where the noise amplitude is calculated and applied independently for the U and V axes (w) rather than as a scalar global multiplier (w). This compensates for the non-conformal nature of the Hemi-Oct projection, ensuring that noise projected into View Space remains Isotropic (circular) rather than Anisotropic (streaked).
     * **Heuristic Proxy**: Scaling based on surface normal components (e.g., ∣N.z∣) to approximate distortion zones with minimal ALU overhead.
 * **Z-Reconstruction**: The standard optimization of storing only the X and Y components of the normal vector and deriving Z mathematically ($z=\sqrt{1−x^2−y^2​}$), assuming unit length.
 * **Precise Encoding (octP)**: An optimization where the encoder searches the four nearest grid points to find the one with minimal angular error. While this reduces mathematical error, it does not increase the available bit resolution, meaning quantization steps (banding) remain visible in low-bit-depth scenarios.
@@ -56,7 +56,7 @@ To ensure a fair "apples-to-apples" comparison, we will test against specific ha
 ### 1. The Pipeline
 We will implement a two-branch rendering pipeline in WebGPU/Three.js:
 * **Path A (Baseline):** Normal → Quantize X/Y to 8-bit (RG8) → Reconstruct Z → Render.
-* **Path B (Optimized):** Normal → Encode Hemi-Oct (U,V) → **Calculate Jacobian Weight ($w$)** → Generate Noise → Scale Noise by $w$ → Add to UV → Quantize to n-bits → Decode Render.
+* **Path B (Optimized):** Normal → Encode Hemi-Oct (U,V) → **Calculate Anistropic Jacobian Weights ($w.x$ et $w.y$)** → Generate Noise → Scale Noise.x by w.x AND Scale Noise.y by w.y → Add to UV → Quantize to n-bits → Decode Render.
 
 **Data Capture:** The application will render specific rotational frames and export them as Lossless PNGs to separate real-time performance from image quality analysis.
 
@@ -80,13 +80,18 @@ We will try the following noises:
 
 **B. Amplitude Logic (Weighting strategy)**
 We test three levels of mathematical precision for the noise scaling factor $w$:
-* **Control (Uniform):** Constant noise amplitude ξ applied across the entire UV map ($w$=1.0).
-* **Analytical Jacobian**: $w$ is calculated using the explicit partial derivatives of the Hemispherical Octahedral projection. The noise is scaled by the determinant of the Jacobian matrix J, ensuring noise density is mathematically normalized relative to surface area:
-$$ w=\frac{1}{\sqrt{det(J^TJ)}}​ $$
-* **Heuristic Approximation**: $w$ is calculated using a low-cost proxy based on the "fold" region of the Octahedral map, approximated by the Z-component of the normal.
-$$ w=smoothstep(0.0,ϵ,|N.z|) $$
+* **Control (Uniform):** Constant noise amplitude ξ applied across the entire UV map ($w$=vec2(1.0, 1.1)).
+* **Analytical Vector-Jacobian**: We calculate the stretch factors of the mapping along the U and V axes independently. To ensure the projected noise is uniform on the sphere surface, we must shrink the texture-space noise in the direction where the mapping stretches the texture. Let $J = [\frac{\partial{P}}{\partial{u}},\frac{\partial{P}}{\partial{v}}]$ be the Jacobian matrix (3 x 2). The weights are the inverse of the column norms:
 
-*Hypothesis: We expect this to approximate the Analytical result at <10% of the ALU cost.*
+$$ w_u = \frac{1}{\lVert\frac{\partial{P}}{\partial{u}}\rVert}, w_v = \frac{1}{\lVert\frac{\partial{P}}{\partial{v}}\rVert} $$
+
+* **Heuristic Approximation**: $w$ is calculated using a low-cost proxy based on Approximation: Instead of calculating exact derivatives, we will use the Python simulation data to perform a least-squares regression, finding simple coefficients to approximate wu​ and wv​ based on ∣u∣ and ∣v∣.
+
+    Expected form: w≈c0​+c1​(u2)+c2​(v2)...
+
+    Logic: Since Octahedral encoding is symmetric, the weights should likely be a function of absolute UV coordinates or 1−∣u∣−∣v∣.
+* **Split-Heuristic**: A hybrid approach where we calculate the Jacobian for the dominant axis only, or use a look-up table (LUT) of 32×32 to store pre-computed weights. This tests Memory (Texture Fetch) vs. ALU (Math) cost.
+
 
 ### 3. Rotational Stress Test
 To ensure we capture artifacts at the "poles" and "diagonals" of the Octahedral map, the test sphere will rotate relative to the light source. 
@@ -103,16 +108,22 @@ Once the images are exported, we will use Python scripts and CLI tools to genera
     This allows us to visualize if the **Weighted** dithering successfully reduces the anisotropic stretching errors along the diagonals compared to **Uniform** dithering.
 * **Specular Luminance Delta:** While Angular Error measures the vector difference, it does not account for visual impact. We will compute the per-pixel luminance difference specifically within the specular lobe region: $ΔL=∣L_{GroundTruth}​ − L_{target}​∣$. This differentiates between a normal vector error in a shadow (invisible) vs. a highlight (highly visible).
 * **Shader Complexity (Instruction Count)**: We will compile both the Analytical and Heuristic shaders to SPIR-V/ISA to compare the instruction count and register pressure. This quantifies the "cost" of the precision gained by the Analytical method.
+* **Gradient Alignment Score**: To validate the "Shape" of the noise, we will compute the gradient of the error map in View Space. 
+    * If noise is isotropic, the gradients of the error should be randomly distributed in direction.
+    * If noise is anisotropic (streaked), the error gradients will cluster perpendicular to the streak.
+
+    We will plot a histogram of Error Gradient directions relative to the Surface Tangent U.
 
 
 ## Hypothesis
-1.  **The Weighting Correction:** We hypothesize that **Target B (12-bit) + Uniform Dithering** will fail at the poles (manifesting as distinct banding in the specular highlight), whereas **Target B + Jacobian-Weighted Dithering** will smooth these artifacts, achieving parity with the 16-bit Baseline.
-2.  **The Efficiency Victory:** We anticipate that while Raw 12-bit frames may show high variance, the Accumulated 12-bit Weighted Octahedral method will achieve an SSIM score >0.98. This confirms that analytical Jacobian attenuation allows us to recover the perceptual precision lost by discarding 4 bits. We also hypothesize that the Heuristic Approximation will achieve an SSIM score within 0.5% of the Analytical Jacobian while requiring significantly fewer GPU cycles. This would prove that for real-time rendering, exact derivative calculation is unnecessary, and simple Z-based damping is sufficient to hide quantization artifacts.
+1.  **The Weighting Correction:** We hypothesize that **Target B (12-bit) + Uniform Dithering** will fail at the poles (manifesting as distinct banding in the specular highlight), whereas **Target B + Vector Jacobian-Weighted Dithering** will smooth these artifacts, achieving parity with the 16-bit Baseline.
+2.  **The Efficiency Victory:** We anticipate that while Raw 12-bit frames may show high variance, the Accumulated 12-bit Weighted Octahedral method will achieve an SSIM score >0.98. This confirms that analytical Vector Jacobian attenuation allows us to recover the perceptual precision lost by discarding 4 bits. We also hypothesize that the Heuristic Approximation will achieve an SSIM score within 0.5% of the Analytical Vector Jacobian while requiring significantly fewer GPU cycles. This would prove that for real-time rendering, exact derivative calculation is unnecessary, and simple Z-based damping is sufficient to hide quantization artifacts.
 3.  **The IGN Trade-off:** While Blue Noise will yield the highest static SSIM, IGN will perform within an acceptable margin for real-time applications. We predict the visual difference between IGN and Blue Noise will be negligible once Jacobian Weighting is applied, as the weighting suppresses the worst-case noise pixels.
 4. **The Precision vs. Perception Divergence**: We hypothesize that while Target P (12-bit Precise) would get the lowest Mean Squared Error (MSE), it will score lower on FLIP (Perceptual Error) than Target B (Jacobian Dithered). This will demonstrate that in memory-constrained G-Buffers, noise-based error masking is perceptually superior to analytical error minimization.
+5. The computational cost of Vector-Jacobian (2x sqrts) will push the shader complexity higher. We predict the 'Split-Heuristic' will become the 'Goldilocks' solution—providing 90% of the visual quality of the Analytical Vector solution at 20% of the cost.
 
 ## Expected Deliverables
 1.  **Efficiency Curve:** A graph plotting Bit-Depth (X-axis) vs. SSIM Score (Y-axis).
 2. **Heatmap of Bit-Efficiency** A heatmap where color = ∣NGT​−NTarget​∣.The goal is to show that our "Weighted Dithering" redistributes the error so that it is perceptually uniform, rather than clustered at the poles.
-2.  **The "Artifact Grid":** A side-by-side visual comparison of the specular highlight at the Octahedral Pole, showing: [No Dither] vs [Uniform Dither] vs [Weighted Dither].
+2.  **The "Artifact Grid":** A side-by-side visual comparison of the specular highlight at the Octahedral Pole, showing: [No Dither] vs [Uniform Dither] vs [Scalar Weighted Dither] vs [Vector Weigthed Dither].
 3.  **Code Snippet:** A copy-paste ready GLSL function for "Jacobian-Weighted Octahedral Encoding" for public use.
