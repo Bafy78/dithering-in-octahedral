@@ -17,14 +17,6 @@ Implication: If true, "Density" is not the problem—Shape (Anisotropy) is. We w
 
 **The Implication:** Applying uniform (scalar) noise in Texture Space results in "streaked" or elongated noise artifacts when projected into View Space. To achieve perceptual uniformity, the dithering algorithm must employ **Vector-Weighted Dithering**. We must calculate distinct scaling factors for the U and V axes ($w_u, w_v$) derived from the partial derivatives of the projection (the Jacobian) to ensure the noise footprint remains circular (isotropic) on the sphere's surface.
 
-### 3. The UV-Diagonal Correlation (Heuristic Feasibility)
-
-**Assumption:** We assume that the anisotropic stretch factors ($w_u$ and $w_v$) are strictly a function of the grid geometry rather than surface depth ($N.z$). While $N.z$ is rotationally symmetric, Octahedral distortion is 4-way symmetric, peaking specifically at the UV diagonals (where $|u| \approx |v|$).
-
-We hypothesize that a **Polynomial Approximation** of the raw UV coordinates (e.g. involving terms like $|u \cdot v|$ or $u^2 - v^2$) can approximate the analytical Jacobian Singular Values with an $R^2 > 0.9$, while costing significantly fewer GPU cycles than calculating the exact derivatives.
-
-**The Risk:** If the mapping between UV position and Jacobian stretch is highly non-linear or requires high-order polynomials to approximate accurately, the "Heuristic" shader complexity may exceed the cost of the Analytical method (which uses standard `fwidth` or derivative instructions), rendering the approximation redundant.
-
 ### 4. The "Bit-Packing" Reality Check (Hardware Validity)
 
 Assumption: That reducing Normal precision to 12 bits (6 bits/channel) actually yields a performance benefit.
