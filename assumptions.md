@@ -17,19 +17,7 @@ Implication: If true, "Density" is not the problem—Shape (Anisotropy) is. We w
 
 **The Implication:** Applying uniform (scalar) noise in Texture Space results in "streaked" or elongated noise artifacts when projected into View Space. To achieve perceptual uniformity, the dithering algorithm must employ **Vector-Weighted Dithering**. We must calculate distinct scaling factors for the U and V axes ($w_u, w_v$) derived from the partial derivatives of the projection (the Jacobian) to ensure the noise footprint remains circular (isotropic) on the sphere's surface.
 
-### 3. The Dithering Amplitude Threshold
-
-**The Risk**: At 12-bit resolution (6 bits per channel), the worst-case angular quantization step (Δθmax​) may be so large that the amplitude of noise required to bridge the quantization bands exceeds the visual "Just Noticeable Difference" (JND) for surfaces with Roughness ∈[0.1,0.2].
-
-**The Assumption**: We assume that for Hemi-Octahedral encoding at 6-bit precision, the maximum angular error Δθmax​ remains below a critical threshold (approx 3.0∘).
-
-* If Δθmax​<3.0∘, the required noise amplitude is low enough to be masked by the specular lobe of a rough surface (r>0.1).
-
-* If Δθmax​>3.0∘, the noise will manifest as visible "surface sand" or "sparkling" that degrades SSIM below the Baseline, regardless of Jacobian weighting.
-
-**Verification Step**: We will use a Python script to compute the max angular gradient between adjacent grid points in the 64×64 Hemi-Oct projection.
-
-### 4. The UV-Diagonal Correlation (Heuristic Feasibility)
+### 3. The UV-Diagonal Correlation (Heuristic Feasibility)
 
 **Assumption:** We assume that the anisotropic stretch factors ($w_u$ and $w_v$) are strictly a function of the grid geometry rather than surface depth ($N.z$). While $N.z$ is rotationally symmetric, Octahedral distortion is 4-way symmetric, peaking specifically at the UV diagonals (where $|u| \approx |v|$).
 
@@ -37,7 +25,7 @@ We hypothesize that a **Polynomial Approximation** of the raw UV coordinates (e.
 
 **The Risk:** If the mapping between UV position and Jacobian stretch is highly non-linear or requires high-order polynomials to approximate accurately, the "Heuristic" shader complexity may exceed the cost of the Analytical method (which uses standard `fwidth` or derivative instructions), rendering the approximation redundant.
 
-### 5. The "Bit-Packing" Reality Check (Hardware Validity)
+### 4. The "Bit-Packing" Reality Check (Hardware Validity)
 
 Assumption: That reducing Normal precision to 12 bits (6 bits/channel) actually yields a performance benefit.
 
@@ -51,7 +39,7 @@ Verification Math: We must verify that a valid G-Buffer packing strategy exists 
 Simulation: Can we fit perceptually decent Roughness into 4 bits (16 levels)?
 If No: Then the target should technically be Target C (10-bit) to allow packing into a R10G10B10A2 format (where Normals get 10 bits total, 5 per axis), or the paper's premise shifts from "Bandwidth Reduction" to "GBuffer Packing Density."
 
-### 6. The "Noise Frequency vs. Quantization Step" Nyquist Limit
+### 5. The "Noise Frequency vs. Quantization Step" Nyquist Limit
 
 Assumption: That TAA can resolve any amplitude of noise given enough frames.
 
