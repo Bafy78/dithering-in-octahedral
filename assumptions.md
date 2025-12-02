@@ -17,7 +17,7 @@ Implication: If true, "Density" is not the problem—Shape (Anisotropy) is. We w
 
 **The Implication:** Applying uniform (scalar) noise in Texture Space results in "streaked" or elongated noise artifacts when projected into View Space. To achieve perceptual uniformity, the dithering algorithm must employ **Vector-Weighted Dithering**. We must calculate distinct scaling factors for the U and V axes ($w_u, w_v$) derived from the partial derivatives of the projection (the Jacobian) to ensure the noise footprint remains circular (isotropic) on the sphere's surface.
 
-### 4. The "Bit-Packing" Reality Check (Hardware Validity)
+### 3. The "Bit-Packing" Reality Check (Hardware Validity)
 
 Assumption: That reducing Normal precision to 12 bits (6 bits/channel) actually yields a performance benefit.
 
@@ -31,7 +31,7 @@ Verification Math: We must verify that a valid G-Buffer packing strategy exists 
 Simulation: Can we fit perceptually decent Roughness into 4 bits (16 levels)?
 If No: Then the target should technically be Target C (10-bit) to allow packing into a R10G10B10A2 format (where Normals get 10 bits total, 5 per axis), or the paper's premise shifts from "Bandwidth Reduction" to "GBuffer Packing Density."
 
-### 5. The "Noise Frequency vs. Quantization Step" Nyquist Limit
+### 4. The "Noise Frequency vs. Quantization Step" Nyquist Limit
 
 Assumption: That TAA can resolve any amplitude of noise given enough frames.
 

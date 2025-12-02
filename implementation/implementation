@@ -1,0 +1,10 @@
+We will use Three.js + WebGPU, using WGSL instead of TSL.
+
+## 1. Ground truth implementation
+* Ground truth 32 bits
+* 16-bit quantized version.
+
+## 2. Hemi-oct implementation
+* quantized hemi oct
+* quantized hemi-oct + uniform dithering
+* quantized hemi-oct + anisotropic jacobian-weighted dithering

@@ -31,7 +31,7 @@ Furthermore, while exhaustive search methods like 'Precise Encoding' minimize an
 
 ## Assumptions to Verify
 
-Before commencing the experimental phase, we must validate the mathematical premises via Python simulation (using SymPy/NumPy). If these assumptions fail, the proposed Jacobian weighting strategy must be adjusted, for example from an Area-based metric (Determinant) to an Angular-based metric (Singular Values).
+Before commencing the experimental phase, we must validate the mathematical premises via Python simulation. Some assumptions could also be validated after getting the results, as they would only impact the usefulness of the technique. We might get good results but realize that it's completely useless.
 The assumptions are described in `Assumptions.md`
 
 
@@ -53,7 +53,7 @@ To ensure a fair "apples-to-apples" comparison, we will test against specific ha
 ## Execution Plan (The Virtual Lab)
 
 ### 1. The Pipeline
-We will implement a two-branch rendering pipeline in WebGPU/Three.js:
+We will implement a two-branch rendering pipeline in Three.js + WebGPU (using WGSL instead of TSL):
 * **Path A (Baseline):** Normal → Quantize X/Y to 8-bit (RG8) → Reconstruct Z → Render.
 * **Path B (Optimized):** Normal → Encode Hemi-Oct (U,V) → **Calculate Anistropic Jacobian Weights ($w.x$ and $w.y$)** → Generate Noise → Scale Noise.x by w.x AND Scale Noise.y by w.y → Add to UV → Quantize to n-bits → Decode Render.
 
