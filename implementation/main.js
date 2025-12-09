@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { wgslFn, normalView, positionView, vec3, float, uniform, mix, step } from 'three/tsl';
+import { wgslFn, normalView, positionView, vec3, float, uniform, mix, step, sin, cos, } from 'three/tsl';
 import * as WEBGPU from 'three/webgpu'
 
 // --- 1. BOILERPLATE SETUP ---
@@ -62,7 +62,14 @@ const specularShader = wgslFn(`
 // --- 3. WIRING THE NODES ---
 
 const V_view = positionView.negate().normalize();
-const L_view = vec3(0.0, 0.0, 1.0);
+
+const speed = 1;
+const timeUniform = uniform(0.0);
+const t = timeUniform.mul(speed);
+const lightX = sin(t.mul(3.0));       // Fast horizontal sweep
+const lightY = sin(t.mul(2.0));       // Slower vertical sweep (hits the poles)
+const lightZ = cos(t.mul(3.0));       // Depth complement
+const L_dynamic = vec3(lightX, lightY, lightZ).normalize();
 
 const roughness = float(0.2); 
 
@@ -83,7 +90,7 @@ const N_final = mix(N_intermediate, N_hemiOct_quantized, selectHemi);
 const specularIntensity = specularShader({ 
     N: N_final,
     V: V_view,
-    L: L_view,
+    L: L_dynamic,
     roughness: roughness 
 });
 
@@ -97,6 +104,9 @@ scene.add(mesh);
 // --- 5. RENDER LOOP ---
 await renderer.init();
 function animate() {
+  const time = performance.now() / 1000;
+  timeUniform.value = time;
+  mesh.rotation.x = Math.sin(time * 0.1) * 0.5;
 	renderer.render(scene, camera);
 	requestAnimationFrame(animate);
 }
