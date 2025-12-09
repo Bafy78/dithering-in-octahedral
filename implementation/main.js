@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { wgslFn, normalWorld, cameraPosition, positionWorld, vec3, float, uniform, mix } from 'three/tsl';
+import { wgslFn, normalView, cameraPosition, positionView, vec3, float, uniform, mix, modelViewMatrix } from 'three/tsl';
 import * as WEBGPU from 'three/webgpu'
 
 // --- 1. BOILERPLATE SETUP ---
@@ -44,21 +44,22 @@ const specularShader = wgslFn(`
 
 // --- 3. WIRING THE NODES ---
 
-const V = cameraPosition.sub(positionWorld).normalize();
-const L = vec3(1.0, 1.0, 1.0).normalize();
+const V_view = positionView.negate().normalize();
+const L_world = vec3(1.0, 1.0, 1.0).normalize();
+const L_view = L_world.transformDirection(modelViewMatrix).normalize();
 
 const roughness = float(0.2); 
 
-const N_groundTruth = normalWorld;
-const N_quantized = rg8Shader({ n: normalWorld });
+const N_groundTruth = normalView;
+const N_quantized = rg8Shader({ n: normalView });
 
 const uMix = uniform(1.0);
 const N_final = mix(N_groundTruth, N_quantized, uMix);
 
 const specularIntensity = specularShader({ 
     N: N_final, 
-    V: V, 
-    L: L, 
+    V: V_view, 
+    L: L_view, 
     roughness: roughness 
 });
 
