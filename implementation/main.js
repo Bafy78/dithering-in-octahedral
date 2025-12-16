@@ -76,19 +76,15 @@ const V_view = positionView.negate().normalize();
 
 // --- 4. THE PIPELINE ---
 
-// A. Calculate Ground Truth
 const N_gt = normalView;
 const Spec_gt = specularShader({ N: N_gt, V: V_view, L: L_dynamic, roughness: uRoughness });
 
-// B. Calculate Target (based on uMode)
 const N_rg8 = rg8Shader({ n: normalView });
 const N_hemi = hemiOctShader({ n_in: normalView });
 
-// Selector Logic
 const isRG8 = step(0.5, uMode).mul(step(uMode, 1.5));
 const isHemi = step(1.5, uMode);
 
-// Mix the Normal based on mode
 const N_target = mix(
     mix(N_gt, N_rg8, isRG8),
     N_hemi, 
@@ -99,15 +95,19 @@ const Spec_target = specularShader({ N: N_target, V: V_view, L: L_dynamic, rough
 
 // --- 5. THE MEASUREMENT LOGIC ---
 
-// Calculate Delta: | GT_Spec - Target_Spec |
-// We amplify it by 10.0 so we can actually see the tiny banding errors.
-const errorHeatmap = abs(Spec_gt.sub(Spec_target)).mul(10.0); 
+const rawError = abs(Spec_gt.sub(Spec_target));
+const heat = rawError.pow(0.5).mul(2.0);
 
-// Final Output Switch
-// If VisMode is 0, show Target Specular. If 1, show Error Heatmap (Green)
+// Simple Heatmap: Black -> Blue -> Green -> Red
+const heatColor = mix(
+    vec3(0.0, 0.0, 1.0),
+    vec3(1.0, 0.0, 0.0),
+    step(0.5, heat)
+);
+
 const finalColor = mix(
     Spec_target, 
-    vec3(0.0, 1.0, 0.0).mul(errorHeatmap.x),
+    heatColor,
     uVisMode
 );
 
@@ -118,15 +118,14 @@ const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 512, 512), material);
 scene.add(mesh);
 
 // --- 6. GUI & RENDER ---
-// This is your "Virtual Lab Bench"
 const gui = new GUI({ title: 'Research Controls' });
 
 const params = {
     mode: 'Ground Truth',
     visualization: 'Standard',
     roughness: 0.15,
-    azimuth: 0.0,   // Changed from lightX
-    elevation: 0.0, // Changed from lightY
+    azimuth: 0.0,
+    elevation: 0.0,
     rotateX: 0.0,
     rotateY: 0.0,
     saveImage: () => saveCanvas()
@@ -144,12 +143,9 @@ gui.add(params, 'visualization', ['Standard', 'Difference (x10)']).onChange(v =>
 
 gui.add(params, 'roughness', 0.01, 0.5).onChange(v => uRoughness.value = v);
 const folderLight = gui.addFolder('Light Position');
-// Allow full 360 rotation (2*PI) horizontally
 folderLight.add(params, 'azimuth', -Math.PI, Math.PI)
     .name('Azimuth (X)')
     .onChange(v => uLightAzimuth.value = v);
-
-// Allow +/- 90 degrees vertically
 folderLight.add(params, 'elevation', -Math.PI / 2, Math.PI / 2)
     .name('Elevation (Y)')
     .onChange(v => uLightElevation.value = v);
