@@ -80,6 +80,65 @@ const hemiOctShaderDithered = wgslFn(`
   }
 `);
 
+const hemiOctShaderAJWD = wgslFn(`
+  fn encode_hemi_oct_ajwd(n_in: vec3f, noise: vec3f, bits: f32) -> vec3f {
+    let max_q = pow(2.0, bits) - 1.0;
+
+    let l1_norm = abs(n_in.x) + abs(n_in.y) + n_in.z;
+    let n = n_in / l1_norm;
+    let u = n.x + n.y;
+    let v = n.x - n.y;
+    let uv_01 = vec2f(u, v) * 0.5 + 0.5;
+
+    let uv_center = vec2f(u, v); 
+    let jacobian = get_jacobian_hemi_oct(uv_center);
+    
+    let safe_J = max(jacobian, 0.05); 
+    let dither_scale = 1.0 / sqrt(safe_J);
+    
+    let final_scale = min(dither_scale, 2.5);
+
+    let noise_centered = noise.xy - 0.5;
+    let base_amp = 1.0 / max_q;
+    
+    let uv_dithered = uv_01 + (noise_centered * base_amp * final_scale);
+
+    let q_uv = round(uv_dithered * max_q) / max_q;
+
+    let uv_recon = q_uv * 2.0 - 1.0;
+    let temp_x = (uv_recon.x + uv_recon.y) * 0.5;
+    let temp_y = (uv_recon.x - uv_recon.y) * 0.5;
+    let z_l1 = 1.0 - abs(temp_x) - abs(temp_y);
+    
+    return normalize(vec3f(temp_x, temp_y, z_l1));
+  }
+    fn get_jacobian_hemi_oct(uv: vec2f) -> f32 {
+    let temp_x = (uv.x + uv.y) * 0.5;
+    let temp_y = (uv.x - uv.y) * 0.5;
+    let z = 1.0 - abs(temp_x) - abs(temp_y);
+    let p = vec3f(temp_x, temp_y, z);
+    
+    let sx = sign(temp_x); // -1 or 1
+    let sy = sign(temp_y); // -1 or 1
+    
+    let d_z_du = -0.5 * sx - 0.5 * sy;
+    let d_z_dv = -0.5 * sx + 0.5 * sy;
+    
+    let dp_du = vec3f(0.5, 0.5, d_z_du);
+    let dp_dv = vec3f(0.5, -0.5, d_z_dv);
+
+    let r = length(p);
+    let s = p / r;
+    
+    let ds_du = (dp_du - s * dot(s, dp_du)) / r;
+    let ds_dv = (dp_dv - s * dot(s, dp_dv)) / r;
+
+    let cross_prod = cross(ds_du, ds_dv);
+    return length(cross_prod);
+  }
+
+`);
+
 const specularShader = wgslFn(`
   fn visualize_specular(N: vec3f, V: vec3f, L: vec3f, roughness: f32) -> vec3f {
     let H = normalize(L + V);
@@ -131,18 +190,24 @@ const Spec_gt = specularShader({ N: N_gt, V: V_view, L: L_dynamic, roughness: uR
 const N_rg8 = rg8Shader({ n: normalView, bits: uBitDepth });
 const N_hemi = hemiOctShader({ n_in: normalView, bits: uBitDepth });
 const N_hemi_dither_uniform = hemiOctShaderDithered({ n_in: normalView, noise: noiseSample, bits: uBitDepth });
+const N_hemi_dither_weighted = hemiOctShaderAJWD({ n_in: normalView, noise: noiseSample, bits: uBitDepth });
 
 const isRG8 = step(0.5, uMode).mul(step(uMode, 1.5));
 const isHemi = step(1.5, uMode).mul(step(uMode, 2.5));
-const isHemiDither = step(2.5, uMode);
+const isHemiUniformDither = step(2.5, uMode).mul(step(uMode, 3.5));
+const isHemiAJWD = step(3.5, uMode);
 
-const N_target = mix(
-    mix(
-        mix(N_gt, N_rg8, isRG8),
-        N_hemi, isHemi
-    ),
-    N_hemi_dither_uniform, isHemiDither
-);
+const N_target = 
+mix(
+  mix(
+      mix(
+          mix(N_gt, N_rg8, isRG8),
+          N_hemi, isHemi
+      ),
+      N_hemi_dither_uniform, isHemiUniformDither
+  ),
+  N_hemi_dither_weighted, isHemiAJWD
+)
 
 const Spec_target = specularShader({ N: N_target, V: V_view, L: L_dynamic, roughness: uRoughness });
 
@@ -187,12 +252,14 @@ gui.add(params, 'mode', [
     'Ground Truth', 
     'Cartesian', 
     'Hemi-Oct', 
-    'Hemi-Oct + Uniform Dither'
+    'Hemi-Oct + Uniform Dither',
+    'Hemi-Oct + AJWD'
 ]).onChange(v => {
     if(v === 'Ground Truth') uMode.value = 0;
     if(v === 'Cartesian') uMode.value = 1;
     if(v === 'Hemi-Oct') uMode.value = 2;
     if(v === 'Hemi-Oct + Uniform Dither') uMode.value = 3;
+    if(v === 'Hemi-Oct + AJWD') uMode.value = 4;
 });
 
 gui.add(params, 'visualization', ['Standard', 'Difference (x10)']).onChange(v => {
