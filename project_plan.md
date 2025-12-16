@@ -3,13 +3,13 @@
 ## Objective
 While existing surveys compare 16-bit Cartesian to 16-bit Octahedral, this comparison is effectively solved: Octahedral is mathematically superior. The open research question is: How much 'slack' does the superior distribution of Octahedral encoding provide? How much can we utilize this efficiency to mask quantization artifacts, rendering the standard 16-bit container as perceptually indistinguishable from 32-bit float as possible?
 
-Specifically, this paper aims to validate if **Distortion-Weighted dithering** can resolve the anisotropic noise artifacts inherent to standard 16-bit Octahedral encoding (RG8). We aim to prove that modulating noise amplitude based on geometric distortion eliminates the 'sparkling' artifacts at the poles, allowing standard 16-bit Octahedral maps to achieve a perceptual quality (SSIM) indistinguishable from 32-bit Float vectors.
+Specifically, this paper aims to validate if **Distortion-Weighted dithering** can resolve the anisotropic noise artifacts inherent to standard 16-bit Octahedral encoding (RG8). We aim to prove that modulating noise amplitude based on geometric distortion eliminates the 'sparkling' artifacts at the diagonals, allowing standard 16-bit Octahedral maps to achieve a perceptual quality (SSIM) indistinguishable from 32-bit Float vectors.
 
 
 ## Context & Terms
 * **Normal Map:** A texture encoding surface normal vectors for lighting calculations.
 * **G-Buffer Quantization:** The process of packing geometric data into fixed-precision containers to save memory bandwidth.
-* **Octahedral Encoding:** A method of mapping a 3D unit sphere onto a 2D square grid. It is area-preserving but introduces variable geometric distortion (non-uniform density) at the poles.
+* **Octahedral Encoding:** A method of mapping a 3D unit sphere onto a 2D square grid. It is area-preserving but introduces variable geometric distortion (non-uniform density) at the mid-quadrants (diagonals).
     * **Hemispherical Octahedral (Hemi-Oct)**: A variant of Octahedral encoding optimized for View Space G-Buffers. It isolates the central "front-facing" diamond of the map and scales it to fill the $[0,1]^2$ texture space, doubling the precision density compared to standard Octahedral.
 * **Dithering:** Injecting noise prior to quantization to convert low-frequency quantization banding into high-frequency noise.
 * **Adaptive Dithering Weighting**: A technique where noise amplitude is scaled inversely to geometric distortion. We investigate two sub-types:
@@ -20,7 +20,7 @@ Specifically, this paper aims to validate if **Distortion-Weighted dithering** c
 ## The "Epsilon" (The Innovation)
 **Current industry standards** typically rely on 16-bit RG8 precision (8 bits per axis) for normal maps.
 
-**The Gap:** While noise injection (dithering) is a standard technique to mitigate quantization banding (e.g., Crytek, Meyer et al.), current implementations universally apply uniform noise amplitude across the texture map. This ignores the variable pixel density of Octahedral encoding. Because the projection is area-preserving but not angle-preserving, uniform 2D noise manifests as anisotropic, non-uniform noise in 3D view space, causing excessive 'sparkling' artifacts at the poles where the sampling density is highest.
+**The Gap:** While noise injection (dithering) is a standard technique to mitigate quantization banding (e.g., Crytek, Meyer et al.), current implementations universally apply uniform noise amplitude across the texture map. This ignores the variable pixel density of Octahedral encoding. Because the projection is area-preserving but not angle-preserving, uniform 2D noise manifests as anisotropic, non-uniform noise in 3D view space, causing excessive 'sparkling' artifacts at the diagonals where the sampling density is highest.
 
 **The Contribution:** We advance beyond subjective visual inspection to a rigorous quantitative efficiency analysis. We introduce **Jacobian-Weighted Dithering** as a mechanism to normalize noise perception. We aim to prove that this technique yields a higher perceptual quality (SSIM/FLIP) than Uniform Dithering within the same standard 16-bit container.
 
@@ -94,7 +94,7 @@ To ensure the 'BRDF amplification' of quantization errors is captured, Surface R
 
 ### 4. Metrics
 Once the images are exported, we will use Python scripts and CLI tools to generate the error metrics:
-* **FLIP (NVIDIA):** We will run the official FLIP tool to generate Perceptual Error Maps. We will specifically look for "fireflies" (high-contrast error dots) which indicate failed dithering at the poles.
+* **FLIP (NVIDIA):** We will run the official FLIP tool to generate Perceptual Error Maps. We will specifically look for "fireflies" (high-contrast error dots) which indicate failed dithering.
 * **SSIM (Structural Similarity):** Computed via Python (Scikit-Image) on frames to measure global structural consistency against the Ground Truth.
 * **Angular Error Heatmap:** We will compute the angle $\theta$ between the ground truth vector $N_{gt}$ and the reconstructed vector $N_{rec}$:
     $$\theta = \arccos(N_{gt} \cdot N_{rec})$$
@@ -108,12 +108,12 @@ Once the images are exported, we will use Python scripts and CLI tools to genera
 
 
 ## Hypothesis
-1.  **The Weighting Correction:** We hypothesize that **Uniform Dithering** will fail at the poles (manifesting as distinct banding in the specular highlight), whereas **AJWD** will smooth these artifacts, achieving higher FLIP scores.
+1.  **The Weighting Correction:** We hypothesize that **Uniform Dithering** will fail at the mid-quadrant lobes (manifesting as distinct banding in the specular highlight), whereas **AJWD** will smooth these artifacts, achieving higher FLIP scores.
 2.  **The Parity:** We anticipate that **AJWD** will effectively close the perceptual gap between 16-bit Octahedral and 32-bit Float, rendering the quantization noise perceptually invisible under standard viewing conditions.
 3.  **The IGN Trade-off:** While Blue Noise will yield the highest static SSIM, IGN will perform within an acceptable margin for real-time applications. We predict the visual difference between IGN and Blue Noise will be negligible once Jacobian Weighting is applied, as the weighting suppresses the worst-case noise pixels.
 
 ## Expected Deliverables
-1.  **Error Distribution Histogram**: A comparison of error magnitudes at the Poles vs. the Equator for Uniform vs. Weighted dithering
-2. **Heatmap of Bit-Efficiency** A heatmap where color = ∣NGT​−NTarget​∣.The goal is to show that our "Weighted Dithering" redistributes the error so that it is perceptually uniform, rather than clustered at the poles.
+1.  **Error Distribution Histogram**: A comparison of error magnitudes at the Diagonals vs. the Equator for Uniform vs. Weighted dithering
+2. **Heatmap of Bit-Efficiency** A heatmap where color = ∣NGT​−NTarget​∣.The goal is to show that our "Weighted Dithering" redistributes the error so that it is perceptually uniform, rather than clustered at the Diagonals.
 2.  **The "Artifact Grid":** A side-by-side visual comparison of the specular highlight at the Octahedral Pole, showing: [No Dither] vs [Uniform Dither] vs [Scalar Weighted Dither] vs [Vector Weigthed Dither].
 3.  **Code Snippet:** A copy-paste ready GLSL function for "Jacobian-Weighted Octahedral Encoding" for public use.

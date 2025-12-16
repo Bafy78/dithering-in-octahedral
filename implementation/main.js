@@ -15,10 +15,15 @@ document.body.appendChild(renderer.domElement);
 
 // --- 2. WGSL FUNCTIONS ---
 const rg8Shader = wgslFn(`
-  fn encode_rg8(n: vec3f) -> vec3f {
+  fn encode_rg8(n: vec3f, bits: f32) -> vec3f {
+    let max_q = pow(2.0, bits) - 1.0; // Dynamic scale factor
     let n_unorm = n * 0.5 + 0.5;
-    let q_x = round(n_unorm.x * 255.0) / 255.0;
-    let q_y = round(n_unorm.y * 255.0) / 255.0;
+    
+    // Quantize
+    let q_x = round(n_unorm.x * max_q) / max_q;
+    let q_y = round(n_unorm.y * max_q) / max_q;
+    
+    // Reconstruct Z
     let x = q_x * 2.0 - 1.0;
     let y = q_y * 2.0 - 1.0;
     let z_sq = 1.0 - (x * x) - (y * y);
@@ -28,15 +33,19 @@ const rg8Shader = wgslFn(`
 `);
 
 const hemiOctShader = wgslFn(`
-  fn encode_hemi_oct(n_in: vec3f) -> vec3f {
+  fn encode_hemi_oct(n_in: vec3f, bits: f32) -> vec3f {
+    let max_q = pow(2.0, bits) - 1.0;
+    
     let l1_norm = abs(n_in.x) + abs(n_in.y) + n_in.z;
     let n = n_in / l1_norm;
     let u = n.x + n.y;
     let v = n.x - n.y;
     let uv_01 = vec2f(u, v) * 0.5 + 0.5;
 
-    let q_uv = round(uv_01 * 255.0) / 255.0;
+    // Quantize
+    let q_uv = round(uv_01 * max_q) / max_q;
 
+    // Decode
     let uv_recon = q_uv * 2.0 - 1.0;
     let temp_x = (uv_recon.x + uv_recon.y) * 0.5;
     let temp_y = (uv_recon.x - uv_recon.y) * 0.5;
@@ -46,7 +55,9 @@ const hemiOctShader = wgslFn(`
 `);
 
 const hemiOctShaderDithered = wgslFn(`
-  fn encode_hemi_oct_dithered(n_in: vec3f, noise: vec3f) -> vec3f {
+  fn encode_hemi_oct_dithered(n_in: vec3f, noise: vec3f, bits: f32) -> vec3f {
+    let max_q = pow(2.0, bits) - 1.0;
+
     let l1_norm = abs(n_in.x) + abs(n_in.y) + n_in.z;
     let n = n_in / l1_norm;
     let u = n.x + n.y;
@@ -54,10 +65,12 @@ const hemiOctShaderDithered = wgslFn(`
     let uv_01 = vec2f(u, v) * 0.5 + 0.5;
 
     let noise_centered = noise.xy - 0.5;
-    let dither_amp = 1.0 / 255.0;
+    
+    // Dither amplitude scales with bit depth
+    let dither_amp = 1.0 / max_q; 
     let uv_dithered = uv_01 + (noise_centered * dither_amp);
 
-    let q_uv = round(uv_dithered * 255.0) / 255.0;
+    let q_uv = round(uv_dithered * max_q) / max_q;
 
     let uv_recon = q_uv * 2.0 - 1.0;
     let temp_x = (uv_recon.x + uv_recon.y) * 0.5;
@@ -80,6 +93,7 @@ const specularShader = wgslFn(`
 
 // --- 3. THE LAB CONTROLS ---
 const uRoughness = uniform(0.15);
+const uBitDepth = uniform(8.0);
 const uLightAzimuth = uniform(0.0);
 const uLightElevation = uniform(0.0);
 const theta = uLightAzimuth;
@@ -114,12 +128,9 @@ const noiseSample = texture(blueNoiseMap, noiseUV);
 const N_gt = normalView;
 const Spec_gt = specularShader({ N: N_gt, V: V_view, L: L_dynamic, roughness: uRoughness });
 
-const N_rg8 = rg8Shader({ n: normalView });
-const N_hemi = hemiOctShader({ n_in: normalView });
-const N_hemi_dither_uniform = hemiOctShaderDithered({ 
-    n_in: normalView, 
-    noise: noiseSample 
-});
+const N_rg8 = rg8Shader({ n: normalView, bits: uBitDepth });
+const N_hemi = hemiOctShader({ n_in: normalView, bits: uBitDepth });
+const N_hemi_dither_uniform = hemiOctShaderDithered({ n_in: normalView, noise: noiseSample, bits: uBitDepth });
 
 const isRG8 = step(0.5, uMode).mul(step(uMode, 1.5));
 const isHemi = step(1.5, uMode).mul(step(uMode, 2.5));
@@ -165,23 +176,22 @@ const gui = new GUI({ title: 'Research Controls' });
 const params = {
     mode: 'Ground Truth',
     visualization: 'Standard',
+    bitDepth: 8,
     roughness: 0.15,
     azimuth: 0.0,
     elevation: 0.0,
-    rotateX: 0.0,
-    rotateY: 0.0,
     saveImage: () => saveCanvas()
 };
 
 gui.add(params, 'mode', [
     'Ground Truth', 
-    'Cartesian RG8', 
-    'Hemi-Oct RG8', 
+    'Cartesian', 
+    'Hemi-Oct', 
     'Hemi-Oct + Uniform Dither'
 ]).onChange(v => {
     if(v === 'Ground Truth') uMode.value = 0;
-    if(v === 'Cartesian RG8') uMode.value = 1;
-    if(v === 'Hemi-Oct RG8') uMode.value = 2;
+    if(v === 'Cartesian') uMode.value = 1;
+    if(v === 'Hemi-Oct') uMode.value = 2;
     if(v === 'Hemi-Oct + Uniform Dither') uMode.value = 3;
 });
 
@@ -189,6 +199,9 @@ gui.add(params, 'visualization', ['Standard', 'Difference (x10)']).onChange(v =>
     uVisMode.value = v === 'Standard' ? 0 : 1;
 });
 
+gui.add(params, 'bitDepth', 2, 16, 1)
+   .name('Bit Depth')
+   .onChange(v => uBitDepth.value = v);
 gui.add(params, 'roughness', 0.01, 0.5).onChange(v => uRoughness.value = v);
 const folderLight = gui.addFolder('Light Position');
 folderLight.add(params, 'azimuth', -Math.PI, Math.PI)
@@ -197,10 +210,6 @@ folderLight.add(params, 'azimuth', -Math.PI, Math.PI)
 folderLight.add(params, 'elevation', -Math.PI / 2, Math.PI / 2)
     .name('Elevation (Y)')
     .onChange(v => uLightElevation.value = v);
-
-const folderMesh = gui.addFolder('Mesh Rotation');
-folderMesh.add(params, 'rotateX', 0, Math.PI * 2).onChange(v => mesh.rotation.x = v);
-folderMesh.add(params, 'rotateY', 0, Math.PI * 2).onChange(v => mesh.rotation.y = v);
 
 gui.add(params, 'saveImage').name("📸 Save Frame for Python");
 
