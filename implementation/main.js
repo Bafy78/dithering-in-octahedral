@@ -1,14 +1,14 @@
 import * as THREE from 'three';
-import { wgslFn, normalView, positionView, vec3, float, uniform, mix, step, abs, length, sin, cos } from 'three/tsl';
+import { wgslFn, normalView, positionView, vec3, vec2, uv, uniform, mix, step, abs, texture, screenCoordinate, sin, cos } from 'three/tsl';
 import * as WEBGPU from 'three/webgpu';
-import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js'; // Standard UI lib
+import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 
 // --- 1. BOILERPLATE ---
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 10); // Narrower FOV for focus
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 10);
 camera.position.z = 2.5;
 
-const renderer = new WEBGPU.WebGPURenderer({ antialias: false }); // Disable AA to see raw noise
+const renderer = new WEBGPU.WebGPURenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
@@ -34,7 +34,30 @@ const hemiOctShader = wgslFn(`
     let u = n.x + n.y;
     let v = n.x - n.y;
     let uv_01 = vec2f(u, v) * 0.5 + 0.5;
+
     let q_uv = round(uv_01 * 255.0) / 255.0;
+
+    let uv_recon = q_uv * 2.0 - 1.0;
+    let temp_x = (uv_recon.x + uv_recon.y) * 0.5;
+    let temp_y = (uv_recon.x - uv_recon.y) * 0.5;
+    let z_l1 = 1.0 - abs(temp_x) - abs(temp_y);
+    return normalize(vec3f(temp_x, temp_y, z_l1));
+  }
+`);
+
+const hemiOctShaderDithered = wgslFn(`
+  fn encode_hemi_oct_dithered(n_in: vec3f, noise: vec3f) -> vec3f {
+    let l1_norm = abs(n_in.x) + abs(n_in.y) + n_in.z;
+    let n = n_in / l1_norm;
+    let u = n.x + n.y;
+    let v = n.x - n.y;
+    let uv_01 = vec2f(u, v) * 0.5 + 0.5;
+
+    let noise_centered = noise.xy - 0.5;
+    let dither_amp = 1.0 / 255.0;
+    let uv_dithered = uv_01 + (noise_centered * dither_amp);
+
+    let q_uv = round(uv_dithered * 255.0) / 255.0;
 
     let uv_recon = q_uv * 2.0 - 1.0;
     let temp_x = (uv_recon.x + uv_recon.y) * 0.5;
@@ -74,21 +97,40 @@ const uVisMode = uniform(0);
 const L_dynamic = vec3(lx, ly, lz);
 const V_view = positionView.negate().normalize();
 
+// Load blue noise texture
+const loader = new THREE.TextureLoader();
+const blueNoiseMap = loader.load('./blue_noise_64.png')
+blueNoiseMap.wrapS = THREE.RepeatWrapping;
+blueNoiseMap.wrapT = THREE.RepeatWrapping;
+blueNoiseMap.minFilter = THREE.NearestFilter;
+blueNoiseMap.magFilter = THREE.NearestFilter;
+const blueNoiseSize = 64.0;
+
 // --- 4. THE PIPELINE ---
+
+const noiseUV = screenCoordinate.xy.div(blueNoiseSize);
+const noiseSample = texture(blueNoiseMap, noiseUV);
 
 const N_gt = normalView;
 const Spec_gt = specularShader({ N: N_gt, V: V_view, L: L_dynamic, roughness: uRoughness });
 
 const N_rg8 = rg8Shader({ n: normalView });
 const N_hemi = hemiOctShader({ n_in: normalView });
+const N_hemi_dither_uniform = hemiOctShaderDithered({ 
+    n_in: normalView, 
+    noise: noiseSample 
+});
 
 const isRG8 = step(0.5, uMode).mul(step(uMode, 1.5));
-const isHemi = step(1.5, uMode);
+const isHemi = step(1.5, uMode).mul(step(uMode, 2.5));
+const isHemiDither = step(2.5, uMode);
 
 const N_target = mix(
-    mix(N_gt, N_rg8, isRG8),
-    N_hemi, 
-    isHemi
+    mix(
+        mix(N_gt, N_rg8, isRG8),
+        N_hemi, isHemi
+    ),
+    N_hemi_dither_uniform, isHemiDither
 );
 
 const Spec_target = specularShader({ N: N_target, V: V_view, L: L_dynamic, roughness: uRoughness });
@@ -131,10 +173,16 @@ const params = {
     saveImage: () => saveCanvas()
 };
 
-gui.add(params, 'mode', ['Ground Truth', 'Cartesian RG8', 'Hemi-Oct RG8']).onChange(v => {
+gui.add(params, 'mode', [
+    'Ground Truth', 
+    'Cartesian RG8', 
+    'Hemi-Oct RG8', 
+    'Hemi-Oct + Uniform Dither'
+]).onChange(v => {
     if(v === 'Ground Truth') uMode.value = 0;
     if(v === 'Cartesian RG8') uMode.value = 1;
     if(v === 'Hemi-Oct RG8') uMode.value = 2;
+    if(v === 'Hemi-Oct + Uniform Dither') uMode.value = 3;
 });
 
 gui.add(params, 'visualization', ['Standard', 'Difference (x10)']).onChange(v => {
