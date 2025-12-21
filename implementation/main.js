@@ -31,9 +31,10 @@ const specularShader = wgslFn(`
 // --- 3. THE LAB CONTROLS ---
 const uRoughness = uniform(0.15);
 const uBitDepth = uniform(8.0);
+const uNoiseAmp = uniform(1.0);
 
 const uMode = uniform(0); 
-const uVisMode = uniform(0); 
+const uVisMode = uniform(0);
 
 const uLightAzimuth = uniform(0.0);
 const uLightElevation = uniform(0.0);
@@ -66,7 +67,8 @@ const N_target = encoderFn({
     n: normalView,
     noise_in: noiseSample,
     bits: uBitDepth,
-    mode: uMode
+    mode: uMode,
+    amp: uNoiseAmp
 });
 
 const Spec_target = specularShader({ N: N_target, V: V_view, L: L_dynamic, roughness: uRoughness });
@@ -105,6 +107,7 @@ const params = {
     roughness: 0.15,
     azimuth: 0.0,
     elevation: 0.0,
+    noiseAmp: 1.0,
     saveImage: () => saveCanvas()
 };
 
@@ -113,13 +116,15 @@ gui.add(params, 'mode', [
     'Cartesian', 
     'Hemi-Oct', 
     'Hemi-Oct + Uniform Dither',
+    'Hemi-Oct + JWD',
     'Hemi-Oct + AJWD'
 ]).onChange(v => {
     if(v === 'Ground Truth') uMode.value = 0;
     if(v === 'Cartesian') uMode.value = 1;
     if(v === 'Hemi-Oct') uMode.value = 2;
     if(v === 'Hemi-Oct + Uniform Dither') uMode.value = 3;
-    if(v === 'Hemi-Oct + AJWD') uMode.value = 4;
+    if(v === 'Hemi-Oct + JWD') uMode.value = 4;
+    if(v === 'Hemi-Oct + AJWD') uMode.value = 5;
 });
 
 gui.add(params, 'visualization', ['Standard', 'Difference (x10)']).onChange(v => {
@@ -138,6 +143,10 @@ folderLight.add(params, 'elevation', -Math.PI / 2, Math.PI / 2)
     .name('Elevation (Y)')
     .onChange(v => uLightElevation.value = v);
 
+gui.add(params, 'noiseAmp', 0.0, 2.0)
+   .name('Noise Amplitude')
+   .onChange(v => uNoiseAmp.value = v);
+   
 gui.add(params, 'saveImage').name("📸 Save Frame for Python");
 
 await renderer.init();

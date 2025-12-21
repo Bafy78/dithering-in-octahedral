@@ -1,4 +1,4 @@
-fn encode_surface(n: vec3f, noise_in: vec3f, bits: f32, mode: f32) -> vec3f {
+fn encode_surface(n: vec3f, noise_in: vec3f, bits: f32, mode: f32, amp: f32) -> vec3f {
     let m = i32(mode);
     var noise_val = vec2f(0.0);
 
@@ -25,26 +25,34 @@ fn encode_surface(n: vec3f, noise_in: vec3f, bits: f32, mode: f32) -> vec3f {
         noise_val = noise_in.xy - 0.5;
     }
 
-    // Mode 4: Hemi-Oct AJWD
-    if (m == 4) {
+    // Hemi-Oct
+    if (m==4 || m==5) {
         let l1 = abs(n.x) + abs(n.y) + n.z;
         let n_norm = n / l1;
         let u = n_norm.x + n_norm.y;
         let v = n_norm.x - n_norm.y;
-        
-        let stretch = get_anisotropic_stretch(vec2f(u, v));
-        var scale_u = 1.0;
-        var scale_v = 1.0;
-        if (stretch.x > stretch.y) {
-            scale_v = stretch.x / stretch.y;
-        } else {
-            scale_u = stretch.y / stretch.x;
+
+        // Mode 4: Hemi-Oct JWD
+        if (m == 4) {
+            let distortion = get_jacobian_distortion(vec2f(u, v));
+            noise_val = (noise_in.xy - 0.5) * sqrt(max(distortion, 0.5) / 0.5);
         }
-        noise_val = (noise_in.xy - 0.5) * vec2f(scale_u, scale_v);
+
+        // Mode 5: Hemi-Oct AJWD
+        if (m == 5) {
+            let stretch = get_anisotropic_stretch(vec2f(u, v));
+            var scale_u = 1.0;  
+            var scale_v = 1.0;
+            if (stretch.x > stretch.y) {
+                scale_v = stretch.x / stretch.y;
+            } else {
+                scale_u = stretch.y / stretch.x;
+            }
+            noise_val = (noise_in.xy - 0.5) * vec2f(scale_u, scale_v);
+        }
     }
 
-    // Call the shared logic
-    return common_hemi_oct(n, noise_val, bits);
+    return common_hemi_oct(n, noise_val * amp, bits);
 }
 
 // --- HELPER: Shared Hemi-Oct Math ---
@@ -74,8 +82,12 @@ fn common_hemi_oct(n_in: vec3f, noise: vec2f, bits: f32) -> vec3f {
     return normalize(vec3f(temp_x, temp_y, z_l1));
 }
 
-// --- HELPER: Anisotropic Stretch for AJWD ---
-fn get_anisotropic_stretch(uv: vec2f) -> vec2f {
+// --- HELPER: Stretches for JWD and AJWD ---
+struct SurfaceDerivatives {
+    ds_du: vec3f,
+    ds_dv: vec3f,
+}
+fn get_surface_derivatives(uv: vec2f) -> SurfaceDerivatives {
     let uv_abs = abs(uv);
     let temp_x = (uv_abs.x + uv_abs.y) * 0.5;
     let temp_y = (uv_abs.x - uv_abs.y) * 0.5;
@@ -95,5 +107,15 @@ fn get_anisotropic_stretch(uv: vec2f) -> vec2f {
     let ds_du = (dp_du - s * dot(s, dp_du)) / r;
     let ds_dv = (dp_dv - s * dot(s, dp_dv)) / r;
 
-    return vec2f(length(ds_du), length(ds_dv));
+    return SurfaceDerivatives(ds_du, ds_dv);
+}
+
+fn get_anisotropic_stretch(uv: vec2f) -> vec2f {
+    let ds = get_surface_derivatives(uv);
+    return vec2f(length(ds.ds_du), length(ds.ds_dv));
+}
+
+fn get_jacobian_distortion(uv: vec2f) -> f32 {
+    let ds = get_surface_derivatives(uv);
+    return length(cross(ds.ds_du, ds.ds_dv));
 }
