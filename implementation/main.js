@@ -33,7 +33,8 @@ const uRoughness = uniform(0.15);
 const uBitDepth = uniform(8.0);
 const uNoiseAmp = uniform(1.0);
 
-const uMode = uniform(0); 
+const uEncodingMode = uniform(0);
+const uNoiseMode = uniform(0);
 const uVisMode = uniform(0);
 
 const uLightAzimuth = uniform(0.0);
@@ -68,7 +69,8 @@ const N_target = encoderFn({
     noise_in: noiseSample,
     frag_pos: screenCoordinate.xy,
     bits: uBitDepth,
-    mode: uMode,
+    enc_mode: uEncodingMode,
+    noise_mode: uNoiseMode,
     amp: uNoiseAmp
 });
 
@@ -102,7 +104,8 @@ scene.add(mesh);
 const gui = new GUI({ title: 'Research Controls' });
 
 const params = {
-    mode: 'Ground Truth',
+    encoding: 'Ground Truth',
+    noise: 'None',
     visualization: 'Standard',
     bitDepth: 8,
     roughness: 0.15,
@@ -112,19 +115,21 @@ const params = {
     saveImage: () => saveCanvas()
 };
 
-gui.add(params, 'mode', [
-    'Ground Truth', 
-    'Cartesian', 
-    'Hemi-Oct', 
-    'Hemi-Oct + Uniform Blue Noise',
-    'Hemi-Oct + IGN'
-]).onChange(v => {
-    if(v === 'Ground Truth') uMode.value = 0;
-    if(v === 'Cartesian') uMode.value = 1;
-    if(v === 'Hemi-Oct') uMode.value = 2;
-    if(v === 'Hemi-Oct + Uniform Blue Noise') uMode.value = 3;
-    if(v === 'Hemi-Oct + IGN') uMode.value = 4;
-});
+gui.add(params, 'encoding', ['Ground Truth', 'Cartesian', 'Hemi-Oct'])
+   .name('Encoding Type')
+   .onChange(v => {
+       if (v === 'Ground Truth') uEncodingMode.value = 0;
+       if (v === 'Cartesian')    uEncodingMode.value = 1;
+       if (v === 'Hemi-Oct')     uEncodingMode.value = 2;
+   });
+
+gui.add(params, 'noise', ['None', 'Blue Noise', 'IGN'])
+   .name('Dither Pattern')
+   .onChange(v => {
+       if (v === 'None')       uNoiseMode.value = 0;
+       if (v === 'Blue Noise') uNoiseMode.value = 1;
+       if (v === 'IGN')        uNoiseMode.value = 2;
+   });
 
 gui.add(params, 'visualization', ['Standard', 'Difference (x10)']).onChange(v => {
     uVisMode.value = v === 'Standard' ? 0 : 1;
