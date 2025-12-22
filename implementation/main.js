@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { wgslFn, normalView, positionView, vec3, vec2, uv, uniform, mix, step, abs, texture, screenCoordinate, sin, cos } from 'three/tsl';
+import { wgslFn, normalView, positionView, vec3, uniform, mix, step, abs, texture, screenCoordinate, sin, cos } from 'three/tsl';
 import * as WEBGPU from 'three/webgpu';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import encodingShaderCode from './encoding.wgsl?raw';
@@ -66,6 +66,7 @@ const Spec_gt = specularShader({ N: N_gt, V: V_view, L: L_dynamic, roughness: uR
 const N_target = encoderFn({
     n: normalView,
     noise_in: noiseSample,
+    frag_pos: screenCoordinate.xy,
     bits: uBitDepth,
     mode: uMode,
     amp: uNoiseAmp
@@ -115,16 +116,14 @@ gui.add(params, 'mode', [
     'Ground Truth', 
     'Cartesian', 
     'Hemi-Oct', 
-    'Hemi-Oct + Uniform Dither',
-    'Hemi-Oct + JWD',
-    'Hemi-Oct + AJWD'
+    'Hemi-Oct + Uniform Blue Noise',
+    'Hemi-Oct + IGN'
 ]).onChange(v => {
     if(v === 'Ground Truth') uMode.value = 0;
     if(v === 'Cartesian') uMode.value = 1;
     if(v === 'Hemi-Oct') uMode.value = 2;
-    if(v === 'Hemi-Oct + Uniform Dither') uMode.value = 3;
-    if(v === 'Hemi-Oct + JWD') uMode.value = 4;
-    if(v === 'Hemi-Oct + AJWD') uMode.value = 5;
+    if(v === 'Hemi-Oct + Uniform Blue Noise') uMode.value = 3;
+    if(v === 'Hemi-Oct + IGN') uMode.value = 4;
 });
 
 gui.add(params, 'visualization', ['Standard', 'Difference (x10)']).onChange(v => {
