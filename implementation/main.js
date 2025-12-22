@@ -36,18 +36,9 @@ const uNoiseAmp = uniform(1.0);
 const uEncodingMode = uniform(0);
 const uNoiseMode = uniform(0);
 const uNoiseDist = uniform(0);
-const uVisMode = uniform(0);
 
-const uLightAzimuth = uniform(0.0);
-const uLightElevation = uniform(0.0);
-const theta = uLightAzimuth;
-const phi = uLightElevation;
-const lx = sin(theta).mul(cos(phi));
-const ly = sin(phi);
-const lz = cos(theta).mul(cos(phi));
+const uLightDir = uniform(new THREE.Vector3(0, 0, 1));
 
-// Construct Light Vector from Slider Values
-const L_dynamic = vec3(lx, ly, lz);
 const V_view = positionView.negate().normalize();
 
 // Load blue noise texture
@@ -67,9 +58,6 @@ const s3 = texture(blueNoiseMap, noiseUV.add(offsetC)).x;
 const noiseCombined = vec3(s1, s2, s3);
 
 // --- 4. THE PIPELINE ---
-const N_gt = normalView;
-const Spec_gt = specularShader({ N: N_gt, V: V_view, L: L_dynamic, roughness: uRoughness });
-
 const N_target = encoderFn({
     n: normalView,
     noise_in: noiseCombined,
@@ -81,30 +69,12 @@ const N_target = encoderFn({
     amp: uNoiseAmp
 });
 
-const Spec_target = specularShader({ N: N_target, V: V_view, L: L_dynamic, roughness: uRoughness });
-
-// --- 5. THE MEASUREMENT LOGIC ---
-
-const rawError = abs(Spec_gt.sub(Spec_target));
-const heat = rawError.pow(0.5).mul(2.0);
-
-// Simple Heatmap: Black -> Blue -> Green -> Red
-const heatColor = mix(
-    vec3(0.0, 0.0, 1.0),
-    vec3(1.0, 0.0, 0.0),
-    step(0.5, heat)
-);
-
-const finalColor = mix(
-    Spec_target, 
-    heatColor,
-    uVisMode
-);
+const Spec_target = specularShader({ N: N_target, V: V_view, L: uLightDir, roughness: uRoughness });
 
 const material = new WEBGPU.MeshBasicNodeMaterial();
-material.colorNode = finalColor;
+material.colorNode = Spec_target;
 
-const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 512, 512), material);
+const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 128), material);
 scene.add(mesh);
 
 // --- 6. GUI & RENDER ---
@@ -114,7 +84,6 @@ const params = {
     encoding: 'Ground Truth',
     noise: 'None',
     distribution: 'Rectangular',
-    visualization: 'Standard',
     bitDepth: 8,
     roughness: 0.15,
     azimuth: 0.0,
@@ -145,21 +114,29 @@ gui.add(params, 'distribution', ['Rectangular', 'Triangular'])
         uNoiseDist.value = v === 'Rectangular' ? 0 : 1;
     });
 
-gui.add(params, 'visualization', ['Standard', 'Difference (x10)']).onChange(v => {
-    uVisMode.value = v === 'Standard' ? 0 : 1;
-});
-
 gui.add(params, 'bitDepth', 2, 16, 1)
    .name('Bit Depth')
    .onChange(v => uBitDepth.value = v);
 gui.add(params, 'roughness', 0.01, 0.5).onChange(v => uRoughness.value = v);
+
 const folderLight = gui.addFolder('Light Position');
+function updateLightDirection() {
+    const theta = params.azimuth;
+    const phi = params.elevation;
+
+    const x = Math.sin(theta) * Math.cos(phi);
+    const y = Math.sin(phi);
+    const z = Math.cos(theta) * Math.cos(phi);
+
+    uLightDir.value.set(x, y, z).normalize(); 
+}
 folderLight.add(params, 'azimuth', -Math.PI, Math.PI)
     .name('Azimuth (X)')
-    .onChange(v => uLightAzimuth.value = v);
+    .onChange(updateLightDirection);
 folderLight.add(params, 'elevation', -Math.PI / 2, Math.PI / 2)
     .name('Elevation (Y)')
-    .onChange(v => uLightElevation.value = v);
+    .onChange(updateLightDirection);
+updateLightDirection();
 
 gui.add(params, 'noiseAmp', 0.0, 2.0)
    .name('Noise Amplitude')
@@ -183,7 +160,7 @@ function saveCanvas() {
         a.style.display = 'none';
         const url = window.URL.createObjectURL(blob);
         a.href = url;
-        a.download = `capture_${params.mode}_${Date.now()}.png`;
+        a.download = `capture_${Date.now()}.png`;
         a.click();
         window.URL.revokeObjectURL(url);
     });
