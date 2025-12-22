@@ -36,3 +36,10 @@
 * **Benchmarking the "Control" (Float32):**
     * **Section 3:** Provides a rigorous analysis of the error inherent in standard 32-bit floats (FPNVs).
     * **Relevance:** When you calculate SSIM against your "Ground Truth" (32-bit Float), you must acknowledge that Float32 itself is non-uniform. Meyer provides the math to quantify the "noise floor" of your Ground Truth, ensuring you don't chase precision that doesn't exist in the source data.
+
+
+### https://bartwronski.com/2016/10/30/dithering-part-three-real-world-2d-quantization-dithering/
+
+### Banding in Games
+
+### https://www.shadertoy.com/view/4t2SDh

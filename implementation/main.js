@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { wgslFn, normalView, positionView, vec3, uniform, mix, step, abs, texture, screenCoordinate, sin, cos } from 'three/tsl';
+import { wgslFn, normalView, positionView, vec3, vec2, uniform, mix, step, abs, texture, screenCoordinate, sin, cos } from 'three/tsl';
 import * as WEBGPU from 'three/webgpu';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import encodingShaderCode from './encoding.wgsl?raw';
@@ -35,6 +35,7 @@ const uNoiseAmp = uniform(1.0);
 
 const uEncodingMode = uniform(0);
 const uNoiseMode = uniform(0);
+const uNoiseDist = uniform(0);
 const uVisMode = uniform(0);
 
 const uLightAzimuth = uniform(0.0);
@@ -58,7 +59,12 @@ blueNoiseMap.minFilter = THREE.NearestFilter;
 blueNoiseMap.magFilter = THREE.NearestFilter;
 const blueNoiseSize = 64.0;
 const noiseUV = screenCoordinate.xy.div(blueNoiseSize);
-const noiseSample = texture(blueNoiseMap, noiseUV);
+const offsetB = vec2(37.0, 17.0).div(blueNoiseSize);
+const offsetC = vec2(59.0, 83.0).div(blueNoiseSize);
+const s1 = texture(blueNoiseMap, noiseUV).x;
+const s2 = texture(blueNoiseMap, noiseUV.add(offsetB)).x;
+const s3 = texture(blueNoiseMap, noiseUV.add(offsetC)).x;
+const noiseCombined = vec3(s1, s2, s3);
 
 // --- 4. THE PIPELINE ---
 const N_gt = normalView;
@@ -66,11 +72,12 @@ const Spec_gt = specularShader({ N: N_gt, V: V_view, L: L_dynamic, roughness: uR
 
 const N_target = encoderFn({
     n: normalView,
-    noise_in: noiseSample,
+    noise_in: noiseCombined,
     frag_pos: screenCoordinate.xy,
     bits: uBitDepth,
     enc_mode: uEncodingMode,
     noise_mode: uNoiseMode,
+    dist_mode: uNoiseDist,
     amp: uNoiseAmp
 });
 
@@ -106,6 +113,7 @@ const gui = new GUI({ title: 'Research Controls' });
 const params = {
     encoding: 'Ground Truth',
     noise: 'None',
+    distribution: 'Rectangular',
     visualization: 'Standard',
     bitDepth: 8,
     roughness: 0.15,
@@ -130,6 +138,12 @@ gui.add(params, 'noise', ['None', 'Blue Noise', 'IGN'])
        if (v === 'Blue Noise') uNoiseMode.value = 1;
        if (v === 'IGN')        uNoiseMode.value = 2;
    });
+
+gui.add(params, 'distribution', ['Rectangular', 'Triangular'])
+    .name('Distribution')
+    .onChange(v => {
+        uNoiseDist.value = v === 'Rectangular' ? 0 : 1;
+    });
 
 gui.add(params, 'visualization', ['Standard', 'Difference (x10)']).onChange(v => {
     uVisMode.value = v === 'Standard' ? 0 : 1;

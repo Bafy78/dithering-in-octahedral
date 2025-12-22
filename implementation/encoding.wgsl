@@ -1,12 +1,13 @@
-fn encode_surface(n: vec3f, noise_in: vec3f, frag_pos: vec2f, bits: f32, enc_mode: f32, noise_mode: f32, amp: f32) -> vec3f {
+fn encode_surface(n: vec3f, noise_in: vec3f, frag_pos: vec2f, bits: f32, enc_mode: f32, noise_mode: f32, dist_mode: f32, amp: f32) -> vec3f {
     let e = i32(enc_mode);
     let nm = i32(noise_mode);
+    let dm = i32(dist_mode);
 
     // Mode 0: Ground Truth (Bypass)
     if (e == 0) { return n; }
 
-    // Calculate Noise once
-    let noise_val = get_noise(nm, noise_in, frag_pos) * amp;
+    // Calculate Noise with Distribution logic
+    let noise_val = get_noise(nm, dm, noise_in, frag_pos) * amp;
 
     // Route to Encoding
     if (e == 1) { return encode_cartesian(n, noise_val, bits); }
@@ -16,20 +17,41 @@ fn encode_surface(n: vec3f, noise_in: vec3f, frag_pos: vec2f, bits: f32, enc_mod
 }
 
 // --- HELPER: Noise Generation ---
-fn get_noise(mode: i32, noise_in: vec3f, frag_pos: vec2f) -> vec2f {
+fn get_noise(mode: i32, dist: i32, noise_in: vec3f, frag_pos: vec2f) -> vec2f {
     // Mode 0: None
     if (mode == 0) { return vec2f(0.0); }
 
-    // Mode 1: Blue Noise (Texture)
-    if (mode == 1) { return noise_in.xy - 0.5; }
+    var r = vec2f(0.0);
 
-    // Mode 2: IGN (Procedural)
-    if (mode == 2) {
-        let r1 = ign(frag_pos);
-        let r2 = ign(frag_pos + vec2f(5.588238, 5.588238));
-        return vec2f(r1, r2) - 0.5;
+    // Mode 1: Blue Noise
+    if (mode == 1) { 
+        if (dist == 0) {
+            r = noise_in.xy - 0.5;
+        } else {
+            // TPDF: Subtract two channels to get triangular distribution
+            r = vec2f(noise_in.x - noise_in.y, noise_in.y - noise_in.z);
+        }
     }
-    return vec2f(0.0);
+
+    // Mode 2: IGN
+    if (mode == 2) {
+        let u1 = ign(frag_pos);
+        let u2 = ign(frag_pos + vec2f(5.588, 1.3));
+
+        if (dist == 0) {
+            r = vec2f(u1, u2) - 0.5;
+        } else {
+            r = vec2f(remap_noise_tri(u1), remap_noise_tri(u2));
+        }
+    }
+    
+    return r;
+}
+
+fn remap_noise_tri(v: f32) -> f32 {
+    let orig = v * 2.0 - 1.0;
+    let m = orig * inverseSqrt(abs(orig) + 1e-6);
+    return m - sign(orig);
 }
 
 // --- HELPER: Cartesian Encoding (Updated to support Dither) ---
