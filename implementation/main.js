@@ -4,6 +4,7 @@ import * as WEBGPU from 'three/webgpu';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import encodingShaderCode from './encoding.wgsl?raw';
 
+
 // --- 1. BOILERPLATE ---
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 10);
@@ -13,6 +14,7 @@ const renderer = new WEBGPU.WebGPURenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(window.devicePixelRatio);
 document.body.appendChild(renderer.domElement);
+
 
 // --- 2. WGSL FUNCTIONS ---
 const encoderFn = wgslFn(encodingShaderCode);
@@ -27,6 +29,7 @@ const specularShader = wgslFn(`
     return vec3f(spec); 
   }
 `);
+
 
 // --- 3. THE LAB CONTROLS ---
 const uRoughness = uniform(0.15);
@@ -57,6 +60,7 @@ const s2 = texture(blueNoiseMap, noiseUV.add(offsetB)).x;
 const s3 = texture(blueNoiseMap, noiseUV.add(offsetC)).x;
 const noiseCombined = vec3(s1, s2, s3);
 
+
 // --- 4. THE PIPELINE ---
 const N_target = encoderFn({
     n: normalView,
@@ -77,12 +81,13 @@ material.colorNode = Spec_target;
 const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 128), material);
 scene.add(mesh);
 
-// --- 6. GUI & RENDER ---
+
+// --- 5. GUI & RENDER ---
 const gui = new GUI({ title: 'Research Controls' });
 
 const params = {
     encoding: 'Ground Truth',
-    noise: 'None',
+    noise: 'Blue Noise',
     distribution: 'Rectangular',
     bitDepth: 8,
     roughness: 0.15,
@@ -100,12 +105,11 @@ gui.add(params, 'encoding', ['Ground Truth', 'Cartesian', 'Hemi-Oct'])
        if (v === 'Hemi-Oct')     uEncodingMode.value = 2;
    });
 
-gui.add(params, 'noise', ['None', 'Blue Noise', 'IGN'])
+gui.add(params, 'noise', ['Blue Noise', 'IGN'])
    .name('Dither Pattern')
    .onChange(v => {
-       if (v === 'None')       uNoiseMode.value = 0;
-       if (v === 'Blue Noise') uNoiseMode.value = 1;
-       if (v === 'IGN')        uNoiseMode.value = 2;
+       if (v === 'Blue Noise') uNoiseMode.value = 0;
+       if (v === 'IGN')        uNoiseMode.value = 1;
    });
 
 gui.add(params, 'distribution', ['Rectangular', 'Triangular'])
@@ -144,6 +148,51 @@ gui.add(params, 'noiseAmp', 0.0, 2.0)
    
 gui.add(params, 'saveImage').name("📸 Save Frame for Python");
 
+
+// --- 6. INTERACTION (Click to move light) ---
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+let isDragging = false;
+
+function updateLightFromPointer(event) {
+    pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+    pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(pointer, camera);
+    const intersects = raycaster.intersectObject(mesh);
+
+    if (intersects.length > 0) {
+        const point = intersects[0].point;
+        const normal = point.clone().normalize(); 
+        const viewDir = point.clone().sub(camera.position).normalize();
+        const lightDir = viewDir.reflect(normal).normalize();
+
+        uLightDir.value.copy(lightDir);
+
+        const phi = Math.asin(lightDir.y); 
+        const theta = Math.atan2(lightDir.x, lightDir.z);
+        params.azimuth = theta;
+        params.elevation = phi;
+        folderLight.controllers.forEach(c => c.updateDisplay());
+    }
+}
+
+// Event Listeners
+window.addEventListener('pointerdown', (e) => {
+    isDragging = true;
+    updateLightFromPointer(e);
+});
+window.addEventListener('pointermove', (e) => {
+    if (isDragging) {
+        updateLightFromPointer(e);
+    }
+});
+window.addEventListener('pointerup', () => {
+    isDragging = false;
+});
+
+
+// --- 7. RENDER LOOP ---
 await renderer.init();
 
 function animate() {

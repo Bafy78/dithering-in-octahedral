@@ -18,13 +18,10 @@ fn encode_surface(n: vec3f, noise_in: vec3f, frag_pos: vec2f, bits: f32, enc_mod
 
 // --- HELPER: Noise Generation ---
 fn get_noise(mode: i32, dist: i32, noise_in: vec3f, frag_pos: vec2f) -> vec2f {
-    // Mode 0: None
-    if (mode == 0) { return vec2f(0.0); }
-
     var r = vec2f(0.0);
 
-    // Mode 1: Blue Noise
-    if (mode == 1) { 
+    // Mode 0: Blue Noise
+    if (mode == 0) { 
         if (dist == 0) {
             r = noise_in.xy - 0.5;
         } else {
@@ -33,8 +30,8 @@ fn get_noise(mode: i32, dist: i32, noise_in: vec3f, frag_pos: vec2f) -> vec2f {
         }
     }
 
-    // Mode 2: IGN
-    if (mode == 2) {
+    // Mode 1: IGN
+    if (mode == 1) {
         let u1 = ign(frag_pos);
         let u2 = ign(frag_pos + vec2f(5.588, 1.3));
 
