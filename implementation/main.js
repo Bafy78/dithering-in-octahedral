@@ -46,7 +46,7 @@ const V_view = positionView.negate().normalize();
 
 // Load blue noise texture
 const loader = new THREE.TextureLoader();
-const blueNoiseMap = loader.load('./blue_noise_64.png')
+const blueNoiseMap = loader.load('./blue_noise_64.png');
 blueNoiseMap.wrapS = THREE.RepeatWrapping;
 blueNoiseMap.wrapT = THREE.RepeatWrapping;
 blueNoiseMap.minFilter = THREE.NearestFilter;
@@ -78,7 +78,7 @@ const Spec_target = specularShader({ N: N_target, V: V_view, L: uLightDir, rough
 const material = new WEBGPU.MeshBasicNodeMaterial();
 material.colorNode = Spec_target;
 
-const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 128), material);
+const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 256, 256), material);
 scene.add(mesh);
 
 
@@ -121,7 +121,8 @@ gui.add(params, 'distribution', ['Rectangular', 'Triangular'])
 gui.add(params, 'bitDepth', 2, 16, 1)
    .name('Bit Depth')
    .onChange(v => uBitDepth.value = v);
-gui.add(params, 'roughness', 0.01, 0.5).onChange(v => uRoughness.value = v);
+const maxRoughness = 0.5;
+gui.add(params, 'roughness', 0.01, maxRoughness).onChange(v => uRoughness.value = v);
 
 const folderLight = gui.addFolder('Light Position');
 function updateLightDirection() {
@@ -146,7 +147,7 @@ gui.add(params, 'noiseAmp', 0.0, 2.0)
    .name('Noise Amplitude')
    .onChange(v => uNoiseAmp.value = v);
    
-gui.add(params, 'saveImage').name("📸 Save Frame for Python");
+gui.add(params, 'saveImage').name("📸 Save Cropped Frame");
 
 
 // --- 6. INTERACTION (Click to move light) ---
@@ -178,7 +179,7 @@ function updateLightFromPointer(event) {
 }
 
 // Event Listeners
-window.addEventListener('pointerdown', (e) => {
+renderer.domElement.addEventListener('pointerdown', (e) => {
     isDragging = true;
     updateLightFromPointer(e);
 });
@@ -191,6 +192,14 @@ window.addEventListener('pointerup', () => {
     isDragging = false;
 });
 
+// Handle window resizing
+window.addEventListener('resize', onWindowResize);
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
 
 // --- 7. RENDER LOOP ---
 await renderer.init();
@@ -201,16 +210,93 @@ function animate() {
 }
 animate();
 
-// Helper to download the frame
+// --- 8. IMAGE SAVING HELPERS ---
+
+// Helper to trigger download
+function downloadBlob(blob, filename) {
+    const a = document.createElement('a');
+    document.body.appendChild(a);
+    a.style.display = 'none';
+    const url = window.URL.createObjectURL(blob);
+    a.href = url;
+    a.download = filename;
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+// Main saving function with cropping logic
 function saveCanvas() {
-    renderer.domElement.toBlob(blob => {
-        const a = document.createElement('a');
-        document.body.appendChild(a);
-        a.style.display = 'none';
-        const url = window.URL.createObjectURL(blob);
-        a.href = url;
-        a.download = `capture_${Date.now()}.png`;
-        a.click();
-        window.URL.revokeObjectURL(url);
-    });
+    const canvas = renderer.domElement;
+    const width = canvas.width;
+    const height = canvas.height;
+
+    // --- 1. Generate Filename ---
+    const enc = params.encoding.replace(/\s+/g, '');
+    const noise = params.noise.replace(/\s+/g, '');
+    const dist = params.distribution === 'Rectangular' ? 'Rect' : 'Tri';
+    const bits = params.bitDepth;
+    const rough = params.roughness.toFixed(3);
+    const az = (params.azimuth * 180 / Math.PI).toFixed(0);
+    const el = (params.elevation * 180 / Math.PI).toFixed(0);
+    const filename = `${enc}_${noise}_${dist}_${bits}b_R${rough}_Az${az}El${el}.png`;
+
+    // --- 2. Find Highlight Center (Iterative Parallax Correction) ---
+    const L = uLightDir.value.clone().normalize();
+    const camPos = camera.position.clone();
+    
+    // Initial Guess: Assume V is constant (infinite viewer approximation)
+    let V = camPos.clone().normalize(); 
+    let H = L.clone().add(V).normalize();
+    
+    // Refine 3 times (Newton's method style convergence)
+    for (let i = 0; i < 3; i++) {
+        const surfacePoint = H.clone();
+        
+        // Recalculate V from the specific surface point to the camera
+        V = camPos.clone().sub(surfacePoint).normalize();
+        
+        // Recalculate H based on the new local V
+        H = L.clone().add(V).normalize();
+    }
+
+    // Project the precise highlight point to Screen Space
+    const highlightNDC = H.clone().project(camera);
+    const centerX = (highlightNDC.x * 0.5 + 0.5) * width;
+    const centerY = (-(highlightNDC.y) * 0.5 + 0.5) * height;
+
+    // --- 3. Determine Crop Size (Same as before) ---
+    const baseSize = 256;
+    const roughnessScale = 1800; 
+    let boxSize = baseSize + (params.roughness * roughnessScale);
+    boxSize = Math.min(boxSize, Math.min(width, height));
+    boxSize = Math.floor(boxSize);
+
+    // --- 4. Perform Crop ---
+    const halfSize = Math.floor(boxSize / 2);
+    const srcX = Math.floor(centerX - halfSize);
+    const srcY = Math.floor(centerY - halfSize);
+
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = boxSize;
+    tempCanvas.height = boxSize;
+    const ctx = tempCanvas.getContext('2d');
+
+    // Fill Black
+    ctx.fillStyle = 'black';
+    ctx.fillRect(0, 0, boxSize, boxSize);
+
+    // Calculate Intersection
+    const drawSrcX = Math.max(0, srcX);
+    const drawSrcY = Math.max(0, srcY);
+    const drawSrcW = Math.min(width, srcX + boxSize) - drawSrcX;
+    const drawSrcH = Math.min(height, srcY + boxSize) - drawSrcY;
+    const drawDestX = drawSrcX - srcX;
+    const drawDestY = drawSrcY - srcY;
+
+    ctx.drawImage(
+        canvas, 
+        drawSrcX, drawSrcY, drawSrcW, drawSrcH, 
+        drawDestX, drawDestY, drawSrcW, drawSrcH
+    );
+    tempCanvas.toBlob(blob => downloadBlob(blob, "CROP_" + filename));
 }
