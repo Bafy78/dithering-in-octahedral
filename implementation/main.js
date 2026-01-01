@@ -12,7 +12,7 @@ camera.position.z = 2.5;
 
 const renderer = new WEBGPU.WebGPURenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setPixelRatio(1);
 document.body.appendChild(renderer.domElement);
 
 
@@ -192,14 +192,6 @@ window.addEventListener('pointerup', () => {
     isDragging = false;
 });
 
-// Handle window resizing
-window.addEventListener('resize', onWindowResize);
-function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
 
 // --- 7. RENDER LOOP ---
 await renderer.init();
@@ -236,9 +228,10 @@ function saveCanvas() {
     const dist = params.distribution === 'Rectangular' ? 'Rect' : 'Tri';
     const bits = params.bitDepth;
     const rough = params.roughness.toFixed(3);
+    const noiseAmp = params.noiseAmp.toFixed(3);
     const az = (params.azimuth * 180 / Math.PI).toFixed(0);
     const el = (params.elevation * 180 / Math.PI).toFixed(0);
-    const filename = `${enc}_${noise}_${dist}_${bits}b_R${rough}_Az${az}El${el}.png`;
+    const filename = `${enc}_${noise}_${dist}_${bits}b_R${rough}_NAmp${noiseAmp}_Az${az}El${el}.png`;
 
     // --- 2. Find Highlight Center (Iterative Parallax Correction) ---
     const L = uLightDir.value.clone().normalize();
@@ -266,7 +259,7 @@ function saveCanvas() {
 
     // --- 3. Determine Crop Size (Same as before) ---
     const baseSize = 256;
-    const roughnessScale = 1800; 
+    const roughnessScale = 1500; 
     let boxSize = baseSize + (params.roughness * roughnessScale);
     boxSize = Math.min(boxSize, Math.min(width, height));
     boxSize = Math.floor(boxSize);
