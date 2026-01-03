@@ -112,7 +112,14 @@
         \text{SNR}(\mathbf{u}) = \frac{\| \mathbf{\eta}_{S^2} \|_2}{\| \mathbf{e}_{S^2} \|_2} \approx \frac{\| \mathbf{J}_{\Phi}(\mathbf{u}) \cdot \mathbf{\eta}_{\Omega} \|_2}{\| \mathbf{J}_{\Phi}(\mathbf{u}) \cdot \mathbf{e}_{\Omega} \|_2}
     \end{equation}
     
-    Because $\mathbf{J}_{\Phi}$ acts as a common linear operator on both the noise and the signal, the scaling factors effectively cancel out in the ratio. As validated in Figure \ref{fig:efficiency_ratio}, the efficiency ratio remains stochastically invariant across the domain. The expansion or compression of the surface ($J(\mathbf{u})$) automatically modulates the noise level in exact proportion to the error level. No external weighting is required to maintain the masking threshold.
+    Since $\mathbf{e}_{\Omega}$ and $\eta_{\Omega}$ are defined in the same parametric space, the operator $\mathbf{J}_{\Phi}$ deforms their respective probability density functions identically.
+
+    To quantify the stability of this relationship, we define the \textit{Efficiency Ratio} $R(\mathbf{u})$ as the normalized quotient of the noise expansion factor to the error expansion factor along the principal geometric axes:
+    \begin{equation}
+        R(\mathbf{u}) = \frac{\| \mathbf{J}_{\Phi}(\mathbf{u}) \cdot \mathbf{\eta}_{\Omega} \|_2 / \| \mathbf{\eta}_{\Omega} \|_2}{\| \mathbf{J}_{\Phi}(\mathbf{u}) \cdot \mathbf{e}_{\Omega} \|_2 / \| \mathbf{e}_{\Omega} \|_2}
+    \end{equation}
+    
+    As validated in Figure \ref{fig:efficiency_ratio}, the efficiency ratio remains stochastically invariant across the domain. The expansion or compression of the surface ($J(\mathbf{u})$) automatically modulates the noise level in exact proportion to the error level. No external weighting is required to maintain the masking threshold.
 
     \begin{figure}[h]
         \centering
@@ -160,7 +167,7 @@
     
     We also integrated two distinct noise generation strategies to verify if spectral characteristics influence the geometric masking. For both methods, we ensured a Triangular Probability Density Function (TPDF) to eliminate noise modulation:
     \begin{itemize}
-        \item \textbf{Texture-based Blue Noise:} Utilizing a $64 \times 64$ tiling texture to maximize high-frequency energy. subtracting decorrelated samples (obtained via spatial offsetting) to generate the 2D offset vector.
+        \item \textbf{Texture-based Blue Noise:} Utilizing a $64 \times 64$ tiling texture to maximize high-frequency energy. We achieved TPDF by subtracting decorrelated samples (obtained via spatial offsetting) to generate the 2D offset vector.
         \item \textbf{Interleaved Gradient Noise (IGN):} A procedurally generated high-frequency pattern, preferred for its ALU efficiency in modern renderers. We utilized a lightweight analytic remapping function $f(x) = \frac{x}{\sqrt{|x|}} - \text{sgn}(x)$ to reshape the uniform distribution into a triangular one without the computational cost of a second PRNG sample.
     \end{itemize}
     
@@ -175,7 +182,7 @@
     
     Compare the max distortion places vs. min distortion places.
 
-    Demonstrate that AJWD exposes simply adds way too much noise, or, if we reduce the amplitude, doesn't add enough in one axis.
+    Demonstrate that AJWD exposes simply adds way too much noise, or, if we reduce the amplitude manually, doesn't add enough in one axis.
 
     FSIM Error Maps: Heatmaps showing perceptual failure points. Expectation: Uniform Dithering has a lower mean FSIM score than AJWD.
 
@@ -183,14 +190,32 @@
 
 \section{Discussion}
 
-    The Intuition Trap: Discuss why graphics engineers often conflate Sampling Density (which needs weighting, e.g., in Monte Carlo integration) with Quantization Masking (which generally does not)
-    
-    Temporal Stability: Briefly mention that while Uniform Dithering is spatially optimal, there remains the separate temporal challenge mentionned in Cigolle et Al., but Jacobian weighting does not solve it
+    Our results demonstrate a counter-intuitive but mathematically consistent reality: accounting for geometric distortion when dithering non-conformal projections is not only unnecessary but detrimental. This finding invites a broader discussion on why the "Jacobian intuition" fails in this specific context and how these findings integrate with modern temporal supersampling pipelines.
 
+    \subsection{The Intuition Trap: Integration vs. Masking}
+    
+    The hypothesis that dithering requires Jacobian weighting stems from a conflation of two distinct signal processing goals: \textit{energy preservation} (integration) and \textit{artifact masking} (quantization).
+    
+    In contexts such as Monte Carlo integration or texture filtering, the Jacobian determinant is critical. When mapping a signal from a parametric domain $\Omega$ to a surface $S^2$, one must weigh samples by $1/J(\mathbf{u})$ to ensure that the integral of the signal remains constant despite the distortion of the domain. This is the standard intuition for graphics engineers: "density is changing, so we must compensate."
+    
+    However, dithering is not an integration problem; it is a local contrast problem. The goal is not to preserve the total energy of the noise over the sphere, but to maintain the local ratio between the noise amplitude and the quantization step size (the SNR). As demonstrated in our theoretical analysis, the projection operator $\Phi$ applies the same local linear transformation $\mathbf{J}_{\Phi}$ to both the signal error and the added noise. 
+    
+    Consequently, applying an inverse-Jacobian weight to the noise creates a \textit{category error}. It attempts to equalize the absolute noise magnitude on the sphere, ignoring the fact that the quantization artifacts themselves have been stretched. By forcing the noise to be isotropic and uniform in regions where the error is anisotropic and magnified, the "corrected" approach breaks the covariance required for effective masking. We term this the "Intuition Trap": the assumption that a uniform output requires a non-uniform input, when in reality, a covariant input is required to mask a covariant error.
+
+    \subsection{Temporal Stability and Supersampling}
+
+    It is also necessary to contextualize these findings within the scope of Temporal Anti-Aliasing (TAA), which is now ubiquitous in real-time rendering. As noted by Cigolle et al., octahedral encodings can exhibit "wobbly" temporal artifacts because the quantization grid is fixed to the object's local frame, causing the discrete normal values to snap as the camera rotates.
+    
+    While dithering converts this structured snapping into high-frequency noise, it relies on TAA to accumulate these noisy samples into a stable image. One might hypothesize that Jacobian weighting could aid this process by normalizing the noise variance fed into the TAA history rectification clamp. However, our observations suggest the opposite. 
+    
+    By modulating noise amplitude based on surface location (mid-quadrant vs. diagonal), AJWD introduces a spatial variance in the noise floor. As an object rotates, a specific surface point moves through regions of varying Jacobian density. If the dithering strategy modulates amplitude based on this density, the noise level on that specific surface point pulsates over time. This variance complicates the heuristics used by TAA history rejection (neighborhood clamping), potentially leading to ghosting or instability. Uniform dithering provides a consistent noise baseline that is easier for temporal accumulation to model and reject.
+    
 \section{Conclusion}
 
     Summarize the findings: Complexity does not equal Quality.
 
     Final recommendation: Standard 16-bit Hemi-Oct with Uniform noise is the Pareto-optimal solution for G-Buffers.
+
+\section{References}
 
 \end{document}
