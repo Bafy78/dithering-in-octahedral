@@ -1,17 +1,50 @@
-fn encode_surface(n: vec3f, noise_in: vec3f, frag_pos: vec2f, bits: f32, enc_mode: f32, noise_mode: f32, dist_mode: f32, amp: f32) -> vec3f {
+fn encode_surface(n: vec3f, noise_in: vec3f, frag_pos: vec2f, bits: f32, enc_mode: f32, noise_mode: f32, dist_mode: f32, jwd_mode: f32, amp: f32) -> vec3f {
     let e = i32(enc_mode);
     let nm = i32(noise_mode);
     let dm = i32(dist_mode);
+    let jwd = i32(jwd_mode);
 
     // Mode 0: Ground Truth (Bypass)
     if (e == 0) { return n; }
 
     // Calculate Noise with Distribution logic
-    let noise_val = get_noise(nm, dm, noise_in, frag_pos) * amp;
+    var noise_val = get_noise(nm, dm, noise_in, frag_pos) * amp;
 
-    // Route to Encoding
+    // Mode 1: Cartesian
     if (e == 1) { return encode_cartesian(n, noise_val, bits); }
-    if (e == 2) { return encode_hemi_oct(n, noise_val, bits); }
+
+    // Mode 2: Hemi-Oct (With Optional JWD/AJWD)
+    if (e == 2) {
+        // Only calculate JWD factors if requested and in Hemi-Oct mode
+        if (jwd > 0) {
+            // Reconstruct U,V temporarily to calculate distortion
+            let l1 = abs(n.x) + abs(n.y) + n.z;
+            let n_norm = n / l1;
+            let u = n_norm.x + n_norm.y;
+            let v = n_norm.x - n_norm.y;
+            let uv = vec2f(u, v);
+
+            // JWD (Mode 1)
+            if (jwd == 1) {
+                let distortion = get_jacobian_distortion(uv);
+                noise_val = noise_val * sqrt(max(distortion, 0.5) / 0.5);
+            }
+
+            // AJWD (Mode 2)
+            if (jwd == 2) {
+                let stretch = get_anisotropic_stretch(uv);
+                var scale_u = 1.0;  
+                var scale_v = 1.0;
+                if (stretch.x > stretch.y) {
+                    scale_v = stretch.x / stretch.y;
+                } else {
+                    scale_u = stretch.y / stretch.x;
+                }
+                noise_val = noise_val * vec2f(scale_u, scale_v);
+            }
+        }
+        return encode_hemi_oct(n, noise_val, bits); 
+    }
 
     return n;
 }
@@ -105,4 +138,42 @@ fn encode_hemi_oct(n_in: vec3f, noise: vec2f, bits: f32) -> vec3f {
 fn ign(pixel: vec2f) -> f32 {
     let magic = vec3f(0.06711056, 0.00583715, 52.9829189);
     return fract(magic.z * fract(dot(pixel, magic.xy)));
+}
+
+// --- HELPER: Stretches for JWD and AJWD ---
+struct SurfaceDerivatives {
+    ds_du: vec3f,
+    ds_dv: vec3f,
+}
+fn get_surface_derivatives(uv: vec2f) -> SurfaceDerivatives {
+    let uv_abs = abs(uv);
+    let temp_x = (uv_abs.x + uv_abs.y) * 0.5;
+    let temp_y = (uv_abs.x - uv_abs.y) * 0.5;
+    let z = 1.0 - temp_x - abs(temp_y);
+    
+    let sy = step(uv_abs.y, uv_abs.x) * 2.0 - 1.0;
+    let d_z_du = -0.5 - 0.5 * sy; 
+    let d_z_dv = -0.5 + 0.5 * sy;
+    
+    let dp_du = vec3f(0.5, 0.5, d_z_du);
+    let dp_dv = vec3f(0.5, -0.5, d_z_dv);
+
+    let p = vec3f(temp_x, temp_y, z);
+    let r = length(p);
+    let s = p / r;
+    
+    let ds_du = (dp_du - s * dot(s, dp_du)) / r;
+    let ds_dv = (dp_dv - s * dot(s, dp_dv)) / r;
+
+    return SurfaceDerivatives(ds_du, ds_dv);
+}
+
+fn get_anisotropic_stretch(uv: vec2f) -> vec2f {
+    let ds = get_surface_derivatives(uv);
+    return vec2f(length(ds.ds_du), length(ds.ds_dv));
+}
+
+fn get_jacobian_distortion(uv: vec2f) -> f32 {
+    let ds = get_surface_derivatives(uv);
+    return length(cross(ds.ds_du, ds.ds_dv));
 }

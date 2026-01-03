@@ -39,6 +39,7 @@ const uNoiseAmp = uniform(1.0);
 const uEncodingMode = uniform(0);
 const uNoiseMode = uniform(0);
 const uNoiseDist = uniform(0);
+const uJWDMode = uniform(0);
 
 const uLightDir = uniform(new THREE.Vector3(0, 0, 1));
 
@@ -70,6 +71,7 @@ const N_target = encoderFn({
     enc_mode: uEncodingMode,
     noise_mode: uNoiseMode,
     dist_mode: uNoiseDist,
+    jwd_mode: uJWDMode,
     amp: uNoiseAmp
 });
 
@@ -89,6 +91,7 @@ const params = {
     encoding: 'Ground Truth',
     noise: 'Blue Noise',
     distribution: 'Rectangular',
+    jwd: 'Off',
     bitDepth: 8,
     roughness: 0.15,
     azimuth: 0.0,
@@ -117,6 +120,14 @@ gui.add(params, 'distribution', ['Rectangular', 'Triangular'])
     .onChange(v => {
         uNoiseDist.value = v === 'Rectangular' ? 0 : 1;
     });
+
+gui.add(params, 'jwd', ['Off', 'JWD', 'AJWD'])
+   .name('JWD Mode')
+   .onChange(v => {
+       if (v === 'Off')  uJWDMode.value = 0;
+       if (v === 'JWD')  uJWDMode.value = 1;
+       if (v === 'AJWD') uJWDMode.value = 2;
+   });
 
 gui.add(params, 'bitDepth', 2, 16, 1)
    .name('Bit Depth')
