@@ -1,7 +1,7 @@
 \documentclass{article}
 \usepackage{graphicx}
 \graphicspath{ {./images/} }
-\usepackage[a4paper, total={6in, 8in}]{geometry}
+\usepackage[a4paper, total={6in, 10in}]{geometry}
 \usepackage{amssymb}
 \usepackage{amsmath}
 
@@ -21,9 +21,9 @@
 
     Real-time rendering heavily relies on optimizing memory bandwidth, making vector quantization essential. Octahedral and Hemi-Octahedral encodings have replaced older methods like spherical coordinates to become the industry standard for G-Buffers, widely adopted by engines such as Unreal Engine 5 and Unity. These methods dominate because they efficiently map 3D unit vectors to a compact 2D domain without the generic ``pole'' artifacts of polar systems. By packing normals into cost-effective formats like RG16 or RG8, they offer the optimal trade-off between storage size and computational cost.
 
-    However, the efficiency of Hemi-Octahedral encoding comes at the cost of geometric uniformity. The mapping from the 2D square domain Ω to the unit sphere S2 is neither conformal nor area-preserving. Consequently, the pixel density—the surface area on the sphere represented by a single texel—varies significantly across the projection. In regions such as the mid-quadrants, the mapping stretches the domain, causing a fixed quantization step in texture space to manifest as a magnified geometric error on the sphere surface. This results in a spatially inconsistent error distribution, where quantization artifacts (banding) are drastically more visible in specific regions of the view frustum than others.
+    However, the efficiency of Hemi-Octahedral encoding comes at the cost of geometric uniformity. The mapping from the 2D square domain $\Omega$ to the unit sphere $S^2$ is neither conformal nor area-preserving. Consequently, the pixel density—the surface area on the sphere represented by a single texel—varies significantly across the projection. In regions such as the mid-quadrants, the mapping stretches the domain, causing a fixed quantization step in texture space to manifest as a magnified geometric error on the sphere surface. This results in a spatially inconsistent error distribution, where quantization artifacts (banding) are drastically more visible in specific regions of the view frustum than others.
     
-    This non-uniformity invites a compelling, albeit incorrect, intuition regarding signal processing. If the geometric distortion varies, it follows that a uniform noise floor in texture space will yield non-uniform noise on the sphere. A natural hypothesis is that to achieve perceptually uniform masking, the dithering strategy must compensate for the projection's distortion. This line of reasoning suggests a \textit{Jacobian-weighted} approach: modulating the noise amplitude by the inverse of the local geometric density to enforce an isotropic noise distribution in View Space.
+    This non-uniformity invites a compelling, albeit incorrect, intuition regarding signal processing. If the geometric distortion varies, it follows that a uniform noise floor in texture space will yield non-uniform noise on the sphere. A natural hypothesis is that to achieve perceptually uniform masking, the dithering strategy must compensate for the projection's distortion. This line of reasoning suggests a \textit{Jacobian-weighted} approach: modulating the noise amplitude proportionally to the local distortion, in an attempt to match the noise energy to the magnified geometric error.
 
     This paper refutes the utility of such density-corrected dithering strategies. We present a theoretical proof and experimental validation demonstrating that Uniform PDF Dithering in the texture domain remains the optimal strategy for masking quantization artifacts, regardless of the projection's non-linearity.
     
@@ -42,7 +42,7 @@
     
     The standard solution to this problem is dithering: the intentional addition of noise to the signal prior to quantization . This process effectively decorrelates the quantization error from the signal, converting structured, low-frequency banding artifacts into high-frequency noise, which is visually less objectionable. The effectiveness of dithering is governed by two primary characteristics: the probability density function (PDF) of the noise amplitude and its spatial spectral distribution (PSD).
     
-    Regarding the amplitude distribution, simple uniform white noise (RPDF) is often insufficient as it preserves the mean error but fails to eliminate noise modulation, leaving areas of low noise where the signal aligns with quantization steps . Gjøl et al. demonstrate that a triangular probability distribution (TPDF), achieved by summing two uniform random variables, provides superior results . By extending the noise range (typically $[-1, 1]$ LSB), TPDF dithering ensures a constant noise floor, eliminating the visual modulation that occurs with uniform distributions .
+    Regarding the amplitude distribution, simple uniform white noise (RPDF) is often insufficient as it preserves the mean error but fails to eliminate noise modulation, leaving areas of low noise where the signal aligns with quantization steps . Gjøl et al. demonstrate that a triangular probability distribution (TPDF), achieved by summing two uniform random variables (for texture-based noise) or analytically remapping the signal (for procedural noise), provides superior results . By extending the noise range (typically $[-1, 1]$ LSB), TPDF dithering ensures a constant noise floor, eliminating the visual modulation that occurs with uniform distributions .
     
     Spatially, the distribution of noise samples determines the perceptual quality of the dithered image. Several standard approaches dominate real-time rendering:
     
@@ -68,7 +68,7 @@
 \section{Theoretical Analysis}
     \subsection{Geometric Properties of the Projection}
     
-    We define the Hemi-Octahedral projection as a mapping $\Phi: \Omega \rightarrow S^2$, where the parametric domain is the square $\Omega = [-1, 1]^2$. The construction flattens the sphere onto an inscribed octahedron (the $L_1$ sphere) before normalizing the result. For a domain coordinate $\mathbf{u} = [u, v]^T$, the intermediate $L_1$ vector is given by $\mathbf{p} = [u, v, 1 - |u| - |v|]^T$ (with appropriate folding for the negative hemisphere), and the final mapping is the normalization $\Phi(\mathbf{u}) = \mathbf{p} / \|\mathbf{p}\|_2$.
+    We define the Hemi-Octahedral projection as a mapping $\Phi: \Omega \rightarrow S^2$, where the parametric domain is the square $\Omega = [-1, 1]^2$. The construction flattens the sphere onto an inscribed octahedron (the $L_1$ sphere), and applies a 45-degree rotation to map the resulting diamond shape to the axis-aligned square, before normalizing the result. For a domain coordinate $\mathbf{u} = [u, v]^T$, the intermediate $L_1$ vector is given by $\mathbf{p} = [u, v, 1 - |u| - |v|]^T$ (with appropriate folding for the negative hemisphere), and the final mapping is the normalization $\Phi(\mathbf{u}) = \mathbf{p} / \|\mathbf{p}\|_2$.
     
     To analyze the interaction between this mapping and quantization noise, we must quantify the local geometric distortion. This is fully characterized by the Jacobian matrix of the projection, $\mathbf{J}_{\Phi}(\mathbf{u}) = [\frac{\partial \Phi}{\partial u}, \frac{\partial \Phi}{\partial v}]$. Two specific properties of $\mathbf{J}_{\Phi}$ are critical to our analysis:
     
@@ -85,7 +85,7 @@
         \begin{figure}[h]
             \centering
             \includegraphics[height=7cm]{hemi_oct_anisotropy_plot.png}
-            \caption{Visualization of Anisotropy.}
+            \caption{Visualization of Anisotropy in the Hemi-Octahedral projection.}
             \label{fig:hemi_anisotropy}
         \end{figure}
     \end{enumerate}
@@ -137,13 +137,37 @@
 \section{Experimental Methodology}
 
 \subsection{Implementation}
-    Description of the WebGPU/Three.js pipeline and the specific WGSL implementation of Hemi-Octahedral encoding
 
-    Explicitly defining the "Strawman" algorithm—Anisotropic Jacobian-Weighted Dithering (AJWD)—which attempts to enforce isotropic noise in View Space
+    To empirically validate the theoretical invariance proposed in Section 3, we developed a custom high-precision rendering framework using the WebGPU API and Three.js. The testing environment is designed to isolate quantization artifacts from other sources of error (such as geometric aliasing or texture filtering) and to provide a ``stress test'' scenario where normal precision is the sole determinant of visual quality.
+    
+    \subsubsection{Rendering Pipeline \& Stress Test Configuration}
+    The test scene consists of a highly tessellated sphere ($256 \times 256$ segments) to ensure that vertex interpolation artifacts remain negligible compared to pixel-stage quantization errors. We employ a Blinn-Phong specular model with a high exponent to simulate a low-roughness material (linear roughness $\alpha \approx 0.15$, mapping to a Blinn-Phong exponent of $s \approx 4000$). This configuration serves as the worst-case scenario for normal mapping: narrow specular highlights act as high-frequency amplifiers for low-frequency quantization steps, rendering ``banding'' artifacts immediately visible to the human eye.
+    
+    The quantization pipeline is implemented in a custom WGSL fragment shader. Instead of relying on hardware texture formats (which offer fixed precision), we simulate arbitrary bit-depths programmatically. The high-precision view-space normal $\mathbf{n}_{view}$ is projected into the Hemi-Octahedral domain $\Omega$, resulting in continuous UV coordinates. We then apply dithering noise $\mathbf{\eta}$ and round the signal to simulating $k$-bit fixed-point storage:
+    
+    \begin{equation}
+        \mathbf{u}_{quant} = \frac{round(\frac{\Phi(\mathbf{n}_{view})+1}{2} \cdot (2^k - 1)  + \mathbf{\eta})}{2^k - 1}
+    \end{equation}
+    
+    The quantized coordinate $\mathbf{u}_{quant}$ is then decoded back to a unit vector $\mathbf{n}_{decoded}$ for lighting calculations. This ``in-silico'' quantization allows us to instantly toggle between 8-bit, 10-bit, and 16-bit precision. Furthermore, because the simulation operates on floating-point bit-depths, we are able to sweep precision continuously (e.g., assessing transition artifacts at 9.5 bits) rather than being constrained to the integer steps of hardware formats.
+    
+    \subsubsection{The ``Strawman'' Algorithm: Anisotropic Jacobian-Weighted Dithering (AJWD)}
+    To test the ``Anisotropy Fallacy,'' we implemented a novel, ostensibly ``corrected'' dithering algorithm: Anisotropic Jacobian-Weighted Dithering (AJWD). This algorithm represents the hypothesis that noise should be isotropic on the sphere surface $S^2$, and its energy should match the geometric error magnitude.
+    
+    In the AJWD mode, the shader computes the local Jacobian basis vectors to determine the primary axes of geometric stretch. The amplitude of the added noise $\mathbf{\eta}$ is then spatially modulated by the inverse of this stretch. Specifically, the algorithm identifies the principal axis of maximum geometric stretch. The noise amplitude along the minor axis is then boosted to match this maximum, ensuring that after the projection $\Phi^{-1}$ is applied, the noise footprint on the sphere remains circular. We contrast this against the standard baseline, where the noise amplitude is uniform across the texture domain $\Omega$.
 
-    Stress Test: Sphere setup with high-specular materials (Roughness 0.1) to maximize "banding" visibility.
-
-    Noise Types: Testing IGN vs. Blue Noise, and Rectangular vs Triangular to see if frequency distribution alters the geometric masking conclusion.
+    Crucially, to ensure the Jacobian weighting was theoretically ideal and free from screen-space aliasing, we did not rely on hardware derivatives (\texttt{ddx}/\texttt{ddy}). Instead, we implemented the exact \textit{analytic partial derivatives} of the Hemi-Octahedral mapping in the shader. The surface gradients $\frac{\partial \Phi}{\partial u}$ and $\frac{\partial \Phi}{\partial v}$ were computed explicitly from the $L_1$ norm definition, ensuring precise measurement of the local stretch even at low resolutions. We contrast this against the standard baseline, where the noise amplitude is uniform across the texture domain $\Omega$.
+    
+    We also integrated two distinct noise generation strategies to verify if spectral characteristics influence the geometric masking. For both methods, we ensured a Triangular Probability Density Function (TPDF) to eliminate noise modulation:
+    \begin{itemize}
+        \item \textbf{Texture-based Blue Noise:} Utilizing a $64 \times 64$ tiling texture to maximize high-frequency energy. subtracting decorrelated samples (obtained via spatial offsetting) to generate the 2D offset vector.
+        \item \textbf{Interleaved Gradient Noise (IGN):} A procedurally generated high-frequency pattern, preferred for its ALU efficiency in modern renderers. We utilized a lightweight analytic remapping function $f(x) = \frac{x}{\sqrt{|x|}} - \text{sgn}(x)$ to reshape the uniform distribution into a triangular one without the computational cost of a second PRNG sample.
+    \end{itemize}
+    
+    \subsubsection{Data Acquisition and Metric Evaluation}
+    To ensure consistent objective evaluation using the FSIM metric, we implemented an automated capture system. Because the specular highlight moves relative to the view vector, a static crop would introduce framing bias. We developed a parallax-corrected cropping algorithm that iteratively solves for the surface point $\mathbf{p}$ where the reflection vector aligns with the camera. We found that a simple 3-pass convergence loop was sufficient to align the crop window with the specular highlight to sub-pixel accuracy, ensuring that the FSIM metric evaluated quantization noise rather than misalignment discrepancies. 
+    
+    For every combination of encoding (Cartesian vs. Hemi-Oct), dithering strategy (Uniform vs. AJWD), and bit-depth, the system renders and exports a $256 \times 256$ floating-point image of the highlight. These samples are then compared against a ``Ground Truth'' render (unquantized 32-bit float normals) using an offline Python script to compute the FSIM indices presented in Section 4.2.
 
 \subsection{Results \& Evaluation}
 
@@ -151,7 +175,7 @@
     
     Compare the max distortion places vs. min distortion places.
 
-    Demonstrate that AJWD exposes banding in high-stretch regions (due to noise shrinking) or creates "sandpaper" artifacts in compressed regions.
+    Demonstrate that AJWD exposes simply adds way too much noise, or, if we reduce the amplitude, doesn't add enough in one axis.
 
     FSIM Error Maps: Heatmaps showing perceptual failure points. Expectation: Uniform Dithering has a lower mean FSIM score than AJWD.
 
