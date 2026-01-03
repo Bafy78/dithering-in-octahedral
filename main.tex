@@ -1,0 +1,172 @@
+\documentclass{article}
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+\usepackage[a4paper, total={6in, 8in}]{geometry}
+\usepackage{amssymb}
+\usepackage{amsmath}
+
+\title{The Invariance of Dithering Efficiency Under Non-Conformal Projections: A Case Study on Octahedral Normal Maps}
+\author{Rémi Millerat--Gallot}
+\date{January 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+    Hemi-Octahedral encoding is standard for normal map compression, yet it significantly distorts the density of the projected surface. We investigated whether compensating for this distortion using Jacobian-weighted dithering could improve the masking of quantization artifacts compared to standard methods. Our analysis reveals that this hypothesis is incorrect: because the projection transforms the dithering noise and the quantization error identically, the signal-to-noise ratio remains constant without intervention. We conclude that standard uniform dithering is theoretically and practically superior, as explicit density corrections incur computational costs for no visual gain.
+\end{abstract}
+
+\section{Introduction}
+
+    Real-time rendering heavily relies on optimizing memory bandwidth, making vector quantization essential. Octahedral and Hemi-Octahedral encodings have replaced older methods like spherical coordinates to become the industry standard for G-Buffers, widely adopted by engines such as Unreal Engine 5 and Unity. These methods dominate because they efficiently map 3D unit vectors to a compact 2D domain without the generic ``pole'' artifacts of polar systems. By packing normals into cost-effective formats like RG16 or RG8, they offer the optimal trade-off between storage size and computational cost.
+
+    However, the efficiency of Hemi-Octahedral encoding comes at the cost of geometric uniformity. The mapping from the 2D square domain Ω to the unit sphere S2 is neither conformal nor area-preserving. Consequently, the pixel density—the surface area on the sphere represented by a single texel—varies significantly across the projection. In regions such as the mid-quadrants, the mapping stretches the domain, causing a fixed quantization step in texture space to manifest as a magnified geometric error on the sphere surface. This results in a spatially inconsistent error distribution, where quantization artifacts (banding) are drastically more visible in specific regions of the view frustum than others.
+    
+    This non-uniformity invites a compelling, albeit incorrect, intuition regarding signal processing. If the geometric distortion varies, it follows that a uniform noise floor in texture space will yield non-uniform noise on the sphere. A natural hypothesis is that to achieve perceptually uniform masking, the dithering strategy must compensate for the projection's distortion. This line of reasoning suggests a \textit{Jacobian-weighted} approach: modulating the noise amplitude by the inverse of the local geometric density to enforce an isotropic noise distribution in View Space.
+
+    This paper refutes the utility of such density-corrected dithering strategies. We present a theoretical proof and experimental validation demonstrating that Uniform PDF Dithering in the texture domain remains the optimal strategy for masking quantization artifacts, regardless of the projection's non-linearity.
+    
+    Our analysis shows that because the projection operator transforms both the dithering noise and the quantization error identically, the signal-to-noise ratio (SNR) remains invariant under the mapping. We identify the ``Anisotropy Fallacy''—the mistaken belief that isotropic noise is desirable on the sphere surface. In reality, the quantization artifacts themselves are anisotropic (stretched) by the projection; thus, optimal masking requires the noise to undergo the exact same stretching. We conclude that standard uniform dithering naturally satisfies this requirement, rendering explicit Jacobian corrections computationally wasteful and visually detrimental.
+
+\section{Related Work}
+
+\subsection{Unit Vector Encodings}
+    Efficiently mapping the continuous unit sphere $S^2$ to a discrete 2D domain $\Omega$ is a foundational problem in real-time rendering. Historical approaches relied on spherical coordinates (azimuth and inclination), but this parameterization suffers from the ``singularity problem'': precision density tends toward infinity at the poles while becoming sparse at the equator. As confirmed in the comprehensive survey by Cigolle et al., this non-uniformity creates view-dependent artifacts and wastes significant precision.
+    
+    To address these inherent geometric inefficiencies, Meyer et al. introduced Octahedral Normal Vectors (ONV) in 2010. By projecting the sphere onto an inscribed octahedron using the $L_1$ norm and unwrapping it to a square, they eliminated the need for expensive transcendental functions while ensuring a nearly uniform distribution of precision. By 2026, Octahedral encoding (and its Hemi-Octahedral variant) has superseded older methods to become the industry gold standard. However, while macroscopically efficient, the mapping is not strictly isometric; it introduces local variations in pixel density (Jacobian determinant) that form the basis of our quantization analysis.
+
+\subsection{Quantization \& Dithering: Overview of standard approaches (Bayer, Blue Noise, IGN)}
+    
+    Quantization artifacts, commonly manifested as ``color banding'' or Mach bands, arise when high-precision signals are truncated to lower bit-depths, such as standard 8-bit textures or compact G-Buffers . This loss of precision is particularly detrimental in regions of smooth gradients—such as skyboxes, fog, or normal maps on varying surfaces—where the quantization step size becomes perceptually distinct . While gamma correction can inadvertently expose these artifacts in dark areas if mishandled, they remain a fundamental consequence of the discretization process .
+    
+    The standard solution to this problem is dithering: the intentional addition of noise to the signal prior to quantization . This process effectively decorrelates the quantization error from the signal, converting structured, low-frequency banding artifacts into high-frequency noise, which is visually less objectionable. The effectiveness of dithering is governed by two primary characteristics: the probability density function (PDF) of the noise amplitude and its spatial spectral distribution (PSD).
+    
+    Regarding the amplitude distribution, simple uniform white noise (RPDF) is often insufficient as it preserves the mean error but fails to eliminate noise modulation, leaving areas of low noise where the signal aligns with quantization steps . Gjøl et al. demonstrate that a triangular probability distribution (TPDF), achieved by summing two uniform random variables, provides superior results . By extending the noise range (typically $[-1, 1]$ LSB), TPDF dithering ensures a constant noise floor, eliminating the visual modulation that occurs with uniform distributions .
+    
+    Spatially, the distribution of noise samples determines the perceptual quality of the dithered image. Several standard approaches dominate real-time rendering:
+    
+    \begin{itemize}
+        \item \textbf{Ordered Dithering (Bayer Matrix):} Historically ubiquitous, Bayer dithering utilizes a recursive matrix to maximize signal difference in local neighborhoods . While computationally inexpensive and rich in high frequencies, its discrete spectral peaks often result in conspicuous, structured cross-hatch patterns that are prone to aliasing . Wronski notes that despite its legacy usage, ordered dithering is generally visually inferior to modern stochastic methods .
+    
+        \item \textbf{Blue Noise:} Considered the theoretical ideal for dithering, Blue Noise is characterized by a lack of low-frequency energy (a ``clumping'' free spectrum) and a uniform distribution of high frequencies. This spectral profile pushes quantization error into the frequency bands where the human visual system is least sensitive. However, generating high-quality Blue Noise typically requires pre-computed textures, imposing a memory bandwidth cost that can be prohibitive for specific passes.
+    
+        \item \textbf{Interleaved Gradient Noise (IGN):} Proposed by Jimenez in \textit{Call of Duty: Advanced Warfare}, IGN represents a procedural middle ground designed for optimal ALU efficiency. It utilizes a specific algebraic formulation to generate a high-frequency, varying pattern without texture lookups. Wronski highlights IGN as a highly effective real-time solution that mimics the favorable high-frequency characteristics of Blue Noise while avoiding the structured artifacts of Bayer matrices, making it particularly suitable for efficient shader-based dithering .
+    \end{itemize}
+
+\subsection{Perceptual Metrics in Rendering}
+    The objective evaluation of image fidelity requires metrics that align with the Human Visual System (HVS), rather than simple pixel-difference calculations. Traditional metrics such as Mean Squared Error (MSE) and Peak Signal-to-Noise Ratio (PSNR) operate directly on image intensity and correlate poorly with subjective fidelity ratings.
+
+    To address this, metrics like the Structural Similarity (SSIM) index were introduced to capture the loss of structure in an image, based on the hypothesis that the HVS is highly adapted to extract structural information. However, SSIM and its multi-scale variant (MS-SSIM) treat all positions in an image with equal importance during pooling, which fails to account for the varying contributions of different local regions to perception.
+    
+    For the evaluation of quantization artifacts in this study, we utilize the Feature Similarity Index (FSIM) proposed by Zhang et al.. FSIM is grounded in the physiological evidence that the HVS understands images mainly according to low-level features. The metric employs two primary features to characterize local quality:
+    
+    \begin{itemize} \item \textbf{Phase Congruency (PC):} A dimensionless measure of the significance of a local structure. PC is chosen because visually discernable features coincide with points where Fourier waves at different frequencies have congruent phases. This allows the model to detect stable features like edges and zero crossings. \item \textbf{Gradient Magnitude (GM):} Since PC is contrast invariant, FSIM employs GM as a secondary feature to encode contrast information, which affects the HVS perception of image quality. \end{itemize}
+    
+    While originally validated on general image databases, FSIM has demonstrated high consistency with subjective evaluations for specific distortion types relevant to this research. In the TID2008 benchmark, FSIM achieved a Spearman correlation (SROCC) of 0.8564 for "quantization noise" and 0.8566 for "additive Gaussian noise". This suggests the metric is theoretically robust for arbitrating between the structural distortion of quantization banding and the noise floor introduced by dithering strategies. Unlike SSIM, which weights all pixels equally, FSIM uses the PC map to weight the final quality score, positing that areas with high phase congruency (significant structure) are more important to the HVS when evaluating similarity.
+
+\section{Theoretical Analysis}
+    \subsection{Geometric Properties of the Projection}
+    
+    We define the Hemi-Octahedral projection as a mapping $\Phi: \Omega \rightarrow S^2$, where the parametric domain is the square $\Omega = [-1, 1]^2$. The construction flattens the sphere onto an inscribed octahedron (the $L_1$ sphere) before normalizing the result. For a domain coordinate $\mathbf{u} = [u, v]^T$, the intermediate $L_1$ vector is given by $\mathbf{p} = [u, v, 1 - |u| - |v|]^T$ (with appropriate folding for the negative hemisphere), and the final mapping is the normalization $\Phi(\mathbf{u}) = \mathbf{p} / \|\mathbf{p}\|_2$.
+    
+    To analyze the interaction between this mapping and quantization noise, we must quantify the local geometric distortion. This is fully characterized by the Jacobian matrix of the projection, $\mathbf{J}_{\Phi}(\mathbf{u}) = [\frac{\partial \Phi}{\partial u}, \frac{\partial \Phi}{\partial v}]$. Two specific properties of $\mathbf{J}_{\Phi}$ are critical to our analysis:
+    
+    \begin{enumerate}
+        \item \textbf{Area Scaling (Density):} The determinant $J(\mathbf{u}) = \sqrt{\det(\mathbf{J}_{\Phi}^T \mathbf{J}_{\Phi})}$ represents the local expansion factor. As shown in Figure \ref{fig:hemi_distortion}, the mapping is strictly non-uniform. The density fluctuates from $J \approx 0.6$ at the pole ($\mathbf{u}=0$) to $J \approx 2.55$ in the "mid-quadrant" regions, indicating that precision density varies by a factor of $4\times$ across the view frustum.
+        \begin{figure}[h]
+            \centering
+            \includegraphics[height=7cm]{hemi_oct_distortion_plot.png}
+            \caption{Heatmap of the Jacobian Determinant $J(\mathbf{u})$ for Hemi-Octahedral projection.}
+            \label{fig:hemi_distortion}
+        \end{figure}
+
+        \item \textbf{Anisotropy (Shape):} Crucially, the mapping is not conformal. Outside of the center, and specifically around the diagonals, the condition number of $\mathbf{J}_{\Phi}$ increases, implying that the basis vectors are orthogonal neither in direction nor in magnitude. This anisotropic distortion stretches the local geometry significantly along one principal axis.
+        \begin{figure}[h]
+            \centering
+            \includegraphics[height=7cm]{hemi_oct_anisotropy_plot.png}
+            \caption{Visualization of Anisotropy.}
+            \label{fig:hemi_anisotropy}
+        \end{figure}
+    \end{enumerate}
+    
+    Consequently, a square quantization cell (or a uniform noise kernel) in the texture domain $\Omega$ does not map to a square patch on the sphere $S^2$. Instead, it is transformed into an elongated, parallelogram-shaped streak aligned with the major eigenvector of $\mathbf{J}_{\Phi}$. This structural deformation is the primary factor governing artifact visibility.
+    
+\subsection{Signal-to-Noise Invariance and the Anisotropy Fallacy}
+    
+    Having characterized the distortion, we now address the central hypothesis of this study: whether the dithering noise amplitude should be spatially modulated (weighted by $J(\mathbf{u})^{-1}$) to compensate for the variable density of the projection.
+    
+    We model the quantization process on the texture grid as the addition of a discretization error vector $\mathbf{e}_{\Omega}$ and a dithering noise vector $\mathbf{\eta}_{\Omega}$. Since the quantization step $\Delta$ is infinitesimal relative to the curvature of the manifold, the projection $\Phi$ is well-approximated by its first-order Taylor expansion. The resulting geometric error vectors on the sphere, $\mathbf{e}_{S^2}$ and $\mathbf{\eta}_{S^2}$, are thus linear transformations of their domain counterparts:
+    
+    \begin{equation}
+        \mathbf{e}_{S^2} \approx \mathbf{J}_{\Phi}(\mathbf{u}) \cdot \mathbf{e}_{\Omega} \quad \text{and} \quad \mathbf{\eta}_{S^2} \approx \mathbf{J}_{\Phi}(\mathbf{u}) \cdot \mathbf{\eta}_{\Omega}
+    \end{equation}
+    
+    This linearity reveals two fundamental reasons why explicit density correction is theoretically unsound.
+
+    \subsubsection{Magnitude Invariance}
+    
+    The efficacy of dithering is determined by the local Signal-to-Noise Ratio (SNR), defined here as the ratio between the magnitude of the projected noise and the magnitude of the projected quantization step. Substituting the linear approximations, we observe that the Jacobian operator scales both terms:
+    
+    \begin{equation}
+        \text{SNR}(\mathbf{u}) = \frac{\| \mathbf{\eta}_{S^2} \|_2}{\| \mathbf{e}_{S^2} \|_2} \approx \frac{\| \mathbf{J}_{\Phi}(\mathbf{u}) \cdot \mathbf{\eta}_{\Omega} \|_2}{\| \mathbf{J}_{\Phi}(\mathbf{u}) \cdot \mathbf{e}_{\Omega} \|_2}
+    \end{equation}
+    
+    Because $\mathbf{J}_{\Phi}$ acts as a common linear operator on both the noise and the signal, the scaling factors effectively cancel out in the ratio. As validated in Figure \ref{fig:efficiency_ratio}, the efficiency ratio remains stochastically invariant across the domain. The expansion or compression of the surface ($J(\mathbf{u})$) automatically modulates the noise level in exact proportion to the error level. No external weighting is required to maintain the masking threshold.
+
+    \begin{figure}[h]
+        \centering
+        \includegraphics[width=\textwidth]{efficiency_ratio_plot.png}
+        \caption{Scatter plot of the Efficiency Ratio $R(\mathbf{u})$ across the domain. The ratio is invariant at $\approx 1.0$, indicating that projected noise scales exactly with projected error.}
+        \label{fig:efficiency_ratio}
+    \end{figure}
+
+    \subsubsection{The Anisotropy Fallacy}
+    
+    The failure of density-corrected dithering is most acute when considering the \textit{shape} of the artifacts. The \textit{Jacobian-Weighted} strategy operates on the intuition that noise on the sphere should be isotropic (circular). However, as established in Section 3.1, the quantization error $\mathbf{e}_{S^2}$ is highly anisotropic; it manifests as elongated "streaks" aligned with the major eigenvector of $\mathbf{J}_{\Phi}$.
+    
+    Optimal masking requires the noise footprint to geometrically match the error footprint. We contrast the two approaches:
+    
+    \begin{itemize}
+        \item \textbf{Uniform Dithering (Optimal):} The uniform noise $\mathbf{\eta}_{\Omega}$ is naturally stretched by $\mathbf{J}_{\Phi}$ into the same anisotropic shape as the error. The noise "streak" perfectly overlays the quantization "streak," ensuring consistent coverage.
+        \item \textbf{Isotropic Correction (Sub-optimal):} By attempting to force the projected noise $\mathbf{\eta}_{S^2}$ to be circular, this strategy introduces a geometric mismatch. Along the axis of stretching, the circular noise is insufficiently long to cover the elongated banding artifact (under-dithering), while along the axis of compression, the noise is excessively wide (over-dithering).
+    \end{itemize}
+    
+    We conclude that uniform dithering in the parameter space is the Pareto-optimal strategy. The geometric distortion acts not as a hindrance, but as an automatic spatial modulator that preserves the necessary covariance between signal and noise.
+
+\section{Experimental Methodology}
+
+\subsection{Implementation}
+    Description of the WebGPU/Three.js pipeline and the specific WGSL implementation of Hemi-Octahedral encoding
+
+    Explicitly defining the "Strawman" algorithm—Anisotropic Jacobian-Weighted Dithering (AJWD)—which attempts to enforce isotropic noise in View Space
+
+    Stress Test: Sphere setup with high-specular materials (Roughness 0.1) to maximize "banding" visibility.
+
+    Noise Types: Testing IGN vs. Blue Noise, and Rectangular vs Triangular to see if frequency distribution alters the geometric masking conclusion.
+
+\subsection{Results \& Evaluation}
+
+    Visual Inspection (The Artifact Grid)
+    
+    Compare the max distortion places vs. min distortion places.
+
+    Demonstrate that AJWD exposes banding in high-stretch regions (due to noise shrinking) or creates "sandpaper" artifacts in compressed regions.
+
+    FSIM Error Maps: Heatmaps showing perceptual failure points. Expectation: Uniform Dithering has a lower mean FSIM score than AJWD.
+
+    ALU cost comparison. Show that calculating det(J) or partial derivatives adds significant shader overhead ( 10-15 instructions) for negative visual gain.
+
+\section{Discussion}
+
+    The Intuition Trap: Discuss why graphics engineers often conflate Sampling Density (which needs weighting, e.g., in Monte Carlo integration) with Quantization Masking (which generally does not)
+    
+    Temporal Stability: Briefly mention that while Uniform Dithering is spatially optimal, there remains the separate temporal challenge mentionned in Cigolle et Al., but Jacobian weighting does not solve it
+
+\section{Conclusion}
+
+    Summarize the findings: Complexity does not equal Quality.
+
+    Final recommendation: Standard 16-bit Hemi-Oct with Uniform noise is the Pareto-optimal solution for G-Buffers.
+
+\end{document}
