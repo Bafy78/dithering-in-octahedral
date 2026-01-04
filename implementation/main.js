@@ -235,14 +235,27 @@ function saveCanvas() {
 
     // --- 1. Generate Filename ---
     const enc = params.encoding.replace(/\s+/g, '');
-    const noise = params.noise.replace(/\s+/g, '');
-    const dist = params.distribution === 'Rectangular' ? 'Rect' : 'Tri';
-    const bits = params.bitDepth;
     const rough = params.roughness.toFixed(3);
-    const noiseAmp = params.noiseAmp.toFixed(3);
     const az = (params.azimuth * 180 / Math.PI).toFixed(0);
     const el = (params.elevation * 180 / Math.PI).toFixed(0);
-    const filename = `${enc}_${noise}_${dist}_${bits}b_R${rough}_NAmp${noiseAmp}_Az${az}El${el}.png`;
+
+    let filenameString;
+
+    if (params.encoding === 'Ground Truth') {
+        // Cleaner name for Ground Truth (No noise/JWD/BitDepth info needed)
+        filenameString = `${enc}_R${rough}_Az${az}El${el}`;
+    } else {
+        // Detailed name for Encodings (Includes JWD, Noise, Distribution, etc.)
+        const noise = params.noise.replace(/\s+/g, '');
+        const dist = params.distribution === 'Rectangular' ? 'Rect' : 'Tri';
+        const jwd = params.jwd;
+        const bits = params.bitDepth;
+        const noiseAmp = params.noiseAmp.toFixed(3);
+
+        filenameString = `${enc}_${noise}_${dist}_${jwd}_${bits}b_R${rough}_NAmp${noiseAmp}_Az${az}El${el}`;
+    }
+
+    const filename = `${filenameString}.png`;
 
     // --- 2. Find Highlight Center (Iterative Parallax Correction) ---
     const L = uLightDir.value.clone().normalize();
