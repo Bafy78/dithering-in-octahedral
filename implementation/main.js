@@ -132,13 +132,13 @@ gui.add(params, 'jwd', ['Off', 'JWD', 'AJWD'])
 gui.add(params, 'bitDepth', 2, 16, 1)
    .name('Bit Depth')
    .onChange(v => uBitDepth.value = v);
-const maxRoughness = 0.5;
+const maxRoughness = 0.3;
 gui.add(params, 'roughness', 0.01, maxRoughness).onChange(v => uRoughness.value = v);
 
 const folderLight = gui.addFolder('Light Position');
 function updateLightDirection() {
-    const theta = params.azimuth;
-    const phi = params.elevation;
+    const theta = params.azimuth * (Math.PI / 180);
+    const phi = params.elevation * (Math.PI / 180);
 
     const x = Math.sin(theta) * Math.cos(phi);
     const y = Math.sin(phi);
@@ -146,11 +146,11 @@ function updateLightDirection() {
 
     uLightDir.value.set(x, y, z).normalize(); 
 }
-folderLight.add(params, 'azimuth', -Math.PI, Math.PI)
-    .name('Azimuth (X)')
+folderLight.add(params, 'azimuth', -180, 180)
+    .name('Azimuth (°)')
     .onChange(updateLightDirection);
-folderLight.add(params, 'elevation', -Math.PI / 2, Math.PI / 2)
-    .name('Elevation (Y)')
+folderLight.add(params, 'elevation', -90, 90)
+    .name('Elevation (°)')
     .onChange(updateLightDirection);
 updateLightDirection();
 
@@ -183,8 +183,8 @@ function updateLightFromPointer(event) {
 
         const phi = Math.asin(lightDir.y); 
         const theta = Math.atan2(lightDir.x, lightDir.z);
-        params.azimuth = theta;
-        params.elevation = phi;
+        params.azimuth = theta * (180 / Math.PI);
+        params.elevation = phi * (180 / Math.PI);
         folderLight.controllers.forEach(c => c.updateDisplay());
     }
 }
@@ -236,8 +236,8 @@ function saveCanvas() {
     // --- 1. Generate Filename ---
     const enc = params.encoding.replace(/\s+/g, '');
     const rough = params.roughness.toFixed(3);
-    const az = (params.azimuth * 180 / Math.PI).toFixed(0);
-    const el = (params.elevation * 180 / Math.PI).toFixed(0);
+    const az = params.azimuth.toFixed(0);
+    const el = params.elevation.toFixed(0);
 
     let filenameString;
 
@@ -283,7 +283,7 @@ function saveCanvas() {
 
     // --- 3. Determine Crop Size (Same as before) ---
     const baseSize = 256;
-    const roughnessScale = 1500; 
+    const roughnessScale = 500; 
     let boxSize = baseSize + (params.roughness * roughnessScale);
     boxSize = Math.min(boxSize, Math.min(width, height));
     boxSize = Math.floor(boxSize);

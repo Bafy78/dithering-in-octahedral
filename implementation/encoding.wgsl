@@ -25,22 +25,22 @@ fn encode_surface(n: vec3f, noise_in: vec3f, frag_pos: vec2f, bits: f32, enc_mod
             let uv = vec2f(u, v);
 
             // JWD (Mode 1)
-            if (jwd == 1 || jwd == 2) {
+            if (jwd == 1) {
                 let distortion = get_jacobian_distortion(uv);
                 noise_val = noise_val * sqrt(max(distortion, 0.5) / 0.5);
 
-                // AJWD (Mode 2)
-                if (jwd == 2) {
-                    let stretch = get_anisotropic_stretch(uv);
-                    var scale_u = 1.0;  
-                    var scale_v = 1.0;
-                    if (stretch.x > stretch.y) {
-                        scale_v = stretch.x / stretch.y;
-                    } else {
-                        scale_u = stretch.y / stretch.x;
-                    }
-                    noise_val = noise_val * vec2f(scale_u, scale_v);
+            // AJWD (Mode 2)
+            if (jwd == 2) {
+                let stretch = get_anisotropic_stretch(uv);
+                var scale_u = 1.0;  
+                var scale_v = 1.0;
+                if (stretch.x > stretch.y) {
+                    scale_v = stretch.x / stretch.y;
+                } else {
+                    scale_u = stretch.y / stretch.x;
                 }
+                noise_val = noise_val * vec2f(scale_u, scale_v);
+            }
             }
         }
         return encode_hemi_oct(n, noise_val, bits); 
