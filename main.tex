@@ -4,6 +4,8 @@
 \usepackage[a4paper, total={6in, 10in}]{geometry}
 \usepackage{amssymb}
 \usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{parskip}
 
 \title{The Invariance of Dithering Efficiency Under Non-Conformal Projections: A Case Study on Octahedral Normal Maps}
 \author{Rémi Millerat-{}-Gallot}
@@ -44,7 +46,7 @@
 
     For this study, we utilize the Feature Similarity Index (FSIM) proposed by Zhang et al.~\cite{zhang2011}. As noted in recent comprehensive surveys, despite the emergence of deep learning-based methods, HVS-based statistical metrics like FSIM remain highly relevant for their interpretability and robustness \cite{ma2025}. FSIM is grounded in physiological evidence that the HVS perceives images primarily through low-level features rather than absolute pixel values. It employs \textbf{Phase Congruency (PC)} as a primary feature to detect stable structures (such as edges and zero crossings) where Fourier waves have congruent phases, and \textbf{Gradient Magnitude (GM)} as a secondary feature to capture contrast information.
 
-    Crucially, FSIM utilizes the PC map to weight the final quality score, assigning higher importance to areas with significant structural information. This makes it particularly effective for evaluating the "banding" artifacts inherent to normal map quantization. In the TID2008 benchmark, FSIM demonstrated high consistency with human judgment, achieving an SROCC of 0.8564 for "quantization noise", outperforming other advanced structural metrics like VIF and MS-SSIM \cite{zhang2011}. This validates the metric as a theoretically robust arbiter for structural artifacts where pure intensity metrics might fail to capture the perceptual severity of banding.
+    Crucially, FSIM utilizes the PC map to weight the final quality score, assigning higher importance to areas with significant structural information. This makes it particularly effective for evaluating the ``banding'' artifacts inherent to normal map quantization. In the TID2008 benchmark, FSIM demonstrated high consistency with human judgment, achieving an SROCC of 0.8564 for ``quantization noise'', outperforming other advanced structural metrics like VIF and MS-SSIM \cite{zhang2011}. This validates the metric as a theoretically robust arbiter for structural artifacts where pure intensity metrics might fail to capture the perceptual severity of banding.
 
 \section{Theoretical Analysis}
     \subsection{Geometric Properties of the Projection}
@@ -54,7 +56,7 @@
     The construction projects the hemisphere onto the inscribed octahedron ($L_1$ sphere) and applies a 45-degree rotation to map the resulting diamond shape to the axis-aligned square. For a domain coordinate $\mathbf{u} = [u, v]^T$, we first recover the un-rotated planar coordinates $x', y'$:
     
     \begin{equation}
-        x' = \frac{u + v}{2}, \quad y' = \frac{u - v}{2}
+        x' = \frac{u + v}{2}, \quad y' = \frac{u - v}{2}.
     \end{equation}
     The intermediate $L_1$ vector $\mathbf{p}$ is then reconstructed by projecting onto the $z=1-L_1$ plane:
 
@@ -69,7 +71,7 @@
     To analyze the interaction between this mapping and quantization noise, we must quantify the local geometric distortion. This is fully characterized by the Jacobian matrix of the projection, $\mathbf{J}_{\Phi}(\mathbf{u}) = [\frac{\partial \Phi}{\partial u}, \frac{\partial \Phi}{\partial v}]$. Two specific properties of $\mathbf{J}_{\Phi}$ are critical to our analysis:
     
     \begin{enumerate}
-        \item \textbf{Area Scaling (Density):} The determinant $J(\mathbf{u}) = \sqrt{\det(\mathbf{J}_{\Phi}^T \mathbf{J}_{\Phi})}$ represents the local expansion factor. As shown in Figure \ref{fig:hemi_distortion}, the mapping is strictly non-uniform. The density fluctuates from $J \approx 0.866$ at the pole ($\mathbf{u}=0$) to $J \approx 2.6$ in the "mid-quadrant" regions, indicating that precision density varies by a factor of $3\times$ across the view frustum.
+        \item \textbf{Area Scaling (Density):} The determinant $J(\mathbf{u}) = \sqrt{\det(\mathbf{J}_{\Phi}^T \mathbf{J}_{\Phi})}$ represents the local expansion factor. As shown in Figure \ref{fig:hemi_distortion}, the mapping is strictly non-uniform. The density fluctuates from $J \approx 0.866$ at the pole ($\mathbf{u}=0$) to $J \approx 2.6$ in the ``mid-quadrant'' regions, indicating that precision density varies by a factor of $3\times$ across the view frustum.
         \begin{figure}[h]
             \centering
             \includegraphics[height=7cm]{hemi_oct_distortion_plot.png}
@@ -126,12 +128,12 @@
 
     \subsubsection{The Anisotropy Fallacy}
     
-    The failure of density-corrected dithering is most acute when considering the \textit{shape} of the artifacts. The \textit{Jacobian-Weighted} strategy operates on the intuition that noise on the sphere should be isotropic (circular). However, as established in Section 3.1, the quantization error $\mathbf{e}_{S^2}$ is highly anisotropic; it manifests as elongated "streaks" aligned with the major eigenvector of $\mathbf{J}_{\Phi}$.
+    The failure of density-corrected dithering is most acute when considering the \textit{shape} of the artifacts. The \textit{Jacobian-Weighted} strategy operates on the intuition that noise on the sphere should be isotropic (circular). However, as established in Section 3.1, the quantization error $\mathbf{e}_{S^2}$ is highly anisotropic; it manifests as elongated ``streaks'' aligned with the major eigenvector of $\mathbf{J}_{\Phi}$.
     
     Optimal masking requires the noise footprint to geometrically match the error footprint. We contrast the two approaches:
     
     \begin{itemize}
-        \item \textbf{Uniform Dithering (Optimal):} The uniform noise $\mathbf{\eta}_{\Omega}$ is naturally stretched by $\mathbf{J}_{\Phi}$ into the same anisotropic shape as the error. The noise "streak" perfectly overlays the quantization "streak," ensuring consistent coverage.
+        \item \textbf{Uniform Dithering (Optimal):} The uniform noise $\mathbf{\eta}_{\Omega}$ is naturally stretched by $\mathbf{J}_{\Phi}$ into the same anisotropic shape as the error. The noise ``streak'' perfectly overlays the quantization ``streak'', ensuring consistent coverage.
         \item \textbf{Isotropic Correction (Sub-optimal):} By attempting to force the projected noise $\mathbf{\eta}_{S^2}$ to be circular, this strategy introduces a geometric mismatch. Along the axis of stretching, the circular noise is insufficiently long to cover the elongated banding artifact (under-dithering), while along the axis of compression, the noise is excessively wide (over-dithering).
     \end{itemize}
     
@@ -155,7 +157,7 @@
     The quantized coordinate $\mathbf{u}_{quant}$ is then decoded back to a unit vector $\mathbf{n}_{decoded}$ for lighting calculations. This ``in-silico'' quantization allows us to instantly toggle between 8-bit, 10-bit, and 16-bit precision. Furthermore, because the simulation operates on floating-point bit-depths, we are able to sweep precision continuously (e.g., assessing transition artifacts at 9.5 bits) rather than being constrained to the integer steps of hardware formats.
     
     \subsubsection{The Theoretical Foil: Anisotropic Jacobian-Weighted Dithering (AJWD)}
-    To rigorously validate the robustness of standard dithering, we implemented a counter-factual algorithm: Anisotropic Jacobian-Weighted Dithering (AJWD). While not a standard industrial technique, AJWD serves as the rigorous embodiment of the "isotropic intuition"—the hypothesis that noise should be geometrically uniform on the sphere surface $S^2$.  
+    To rigorously validate the robustness of standard dithering, we implemented a counter-factual algorithm: Anisotropic Jacobian-Weighted Dithering (AJWD). While not a standard industrial technique, AJWD serves as the rigorous embodiment of the ``isotropic intuition'': the hypothesis that noise should be geometrically uniform on the sphere surface $S^2$.  
     
     In the AJWD mode, the shader computes the local Jacobian basis vectors to determine the primary axes of geometric stretch. The amplitude of the added noise $\mathbf{\eta}$ is then spatially modulated by the inverse of this stretch. Specifically, the algorithm identifies the principal axis of maximum geometric stretch. The noise amplitude along the minor axis is then boosted to match this maximum, ensuring that after the projection $\Phi^{-1}$ is applied, the noise footprint on the sphere remains circular. We contrast this against the standard baseline, where the noise amplitude is uniform across the texture domain $\Omega$.
 
@@ -182,21 +184,21 @@
 
 \section{Discussion}
 
-    Our results demonstrate a counter-intuitive but mathematically consistent reality: accounting for geometric distortion when dithering non-conformal projections is unnecessary. This provides a formal justification for the industry's reliance on simple uniform noise. The "luck" of standard implementations is actually a property of linear approximation: the distortion acts as an automatic spatial modulator.
+    Our results demonstrate a counter-intuitive but mathematically consistent reality: accounting for geometric distortion when dithering non-conformal projections is unnecessary. This provides a formal justification for the industry's reliance on simple uniform noise. The ``luck'' of standard implementations is actually a property of linear approximation: the distortion acts as an automatic spatial modulator.
     
     \subsection{The Intuition Trap: Integration vs. Masking}
     
     The hypothesis that dithering requires Jacobian weighting stems from a conflation of two distinct signal processing goals: \textit{energy preservation} (integration) and \textit{artifact masking} (quantization).
     
-    In contexts such as Monte Carlo integration or texture filtering, the Jacobian determinant is critical. When mapping a signal from a parametric domain $\Omega$ to a surface $S^2$, one must weigh samples by $1/J(\mathbf{u})$ to ensure that the integral of the signal remains constant despite the distortion of the domain. This is the standard intuition for graphics engineers: "density is changing, so we must compensate."
+    In contexts such as Monte Carlo integration or texture filtering, the Jacobian determinant is critical. When mapping a signal from a parametric domain $\Omega$ to a surface $S^2$, one must weigh samples by $1/J(\mathbf{u})$ to ensure that the integral of the signal remains constant despite the distortion of the domain. This is the standard intuition for graphics engineers: ``density is changing, so we must compensate.''
     
     However, dithering is not an integration problem; it is a local contrast problem. The goal is not to preserve the total energy of the noise over the sphere, but to maintain the local ratio between the noise amplitude and the quantization step size (the SNR). As demonstrated in our theoretical analysis, the projection operator $\Phi$ applies the same local linear transformation $\mathbf{J}_{\Phi}$ to both the signal error and the added noise. 
     
-    Consequently, applying an inverse-Jacobian weight to the noise creates a \textit{category error}. It attempts to equalize the absolute noise magnitude on the sphere, ignoring the fact that the quantization artifacts themselves have been stretched. By forcing the noise to be isotropic and uniform in regions where the error is anisotropic and magnified, the "corrected" approach breaks the covariance required for effective masking. We term this the "Intuition Trap": the assumption that a uniform output requires a non-uniform input, when in reality, a covariant input is required to mask a covariant error.
+    Consequently, applying an inverse-Jacobian weight to the noise creates a \textit{category error}. It attempts to equalize the absolute noise magnitude on the sphere, ignoring the fact that the quantization artifacts themselves have been stretched. By forcing the noise to be isotropic and uniform in regions where the error is anisotropic and magnified, the ``corrected'' approach breaks the covariance required for effective masking. We term this the ``Intuition Trap'': the assumption that a uniform output requires a non-uniform input, when in reality, a covariant input is required to mask a covariant error.
 
     \subsection{Temporal Stability and Supersampling}
 
-    It is also necessary to contextualize these findings within the scope of Temporal Anti-Aliasing (TAA), which is now ubiquitous in real-time rendering. As noted by Cigolle et al.~\cite{cigolle2014}, octahedral encodings can exhibit "wobbly" temporal artifacts because the quantization grid is fixed to the object's local frame, causing the discrete normal values to snap as the camera rotates.
+    It is also necessary to contextualize these findings within the scope of Temporal Anti-Aliasing (TAA), which is now ubiquitous in real-time rendering. As noted by Cigolle et al.~\cite{cigolle2014}, octahedral encodings can exhibit temporal artifacts because the quantization grid is fixed to the object's local frame, causing the discrete normal values to snap as the camera rotates.
     
     While dithering converts this structured snapping into high-frequency noise, relying on TAA to accumulate these noisy samples into a stable image, we posit that Jacobian weighting would be detrimental to this process. Although one might hypothesize that normalizing variance aids the history rectification clamp, AJWD inherently couples noise amplitude to the local Jacobian determinant $J(\mathbf{u})$.
     
@@ -256,13 +258,13 @@
     \bibitem{peters2016}
     Peters, C. (2016).
     Free Blue Noise Textures.
-    \textit{Moments in Graphics}. Available at: http://momentsingraphics.de/BlueNoise.html
+    \textit{Moments in Graphics}. Available at: \url{http://momentsingraphics.de/BlueNoise.html}
 
     \bibitem{karis2014}
     Karis, B. (2014).
     High Quality Temporal Supersampling.
     \textit{SIGGRAPH 2014 Advances in Real-Time Rendering in Games Course}.
-    Available at: http://de45xmedrsdbp.cloudfront.net/Resources/files/TemporalAA\_small-59732822.pdf
+    Available at: \url{http://de45xmedrsdbp.cloudfront.net/Resources/files/TemporalAA\_small-59732822.pdf}
 \end{thebibliography}
 
 \end{document}
