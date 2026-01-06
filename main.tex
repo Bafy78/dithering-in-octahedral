@@ -14,7 +14,7 @@
 \maketitle
 
 \begin{abstract}
-    Hemi-Octahedral encoding is standard for normal map compression, yet it significantly distorts the density of the projected surface. We investigated whether compensating for this distortion using Jacobian-weighted dithering could improve the masking of quantization artifacts compared to standard methods. Our analysis reveals that this hypothesis is incorrect: because the projection transforms the dithering noise and the quantization error identically, the signal-to-noise ratio remains constant without intervention. We conclude that standard uniform dithering is theoretically and practically superior, as explicit density corrections incur computational costs for no visual gain.
+    Hemi-Octahedral encoding, standard for normal map compression, significantly distorts surface density, yet uniform dithering remains the industry default. This paper provides a mathematical proof for the invariance of dithering efficiency under such non-conformal projections. By contrasting standard methods against a Jacobian-weighted theoretical foil, we demonstrate that explicit density correction is mathematically redundant. Our analysis reveals that the projection transforms both dithering noise and quantization error identically, preserving the local Signal-to-Noise Ratio. We conclude that standard uniform dithering is the theoretically optimal strategy for masking quantization artifacts.
 \end{abstract}
 
 \section{Introduction}
@@ -23,11 +23,9 @@
 
     However, the efficiency of Hemi-Octahedral encoding comes at the cost of geometric uniformity. The mapping from the 2D square domain $\Omega$ to the unit sphere $S^2$ is neither conformal nor area-preserving. Consequently, the pixel density—the surface area on the sphere represented by a single texel—varies significantly across the projection. In regions such as the mid-quadrants, the mapping stretches the domain, causing a fixed quantization step in texture space to manifest as a magnified geometric error on the sphere surface. This results in a spatially inconsistent error distribution, where quantization artifacts (banding) are drastically more visible in specific regions of the view frustum than others.
     
-    This non-uniformity invites a compelling, albeit incorrect, intuition regarding signal processing. If the geometric distortion varies, it follows that a uniform noise floor in texture space will yield non-uniform noise on the sphere. A natural hypothesis is that to achieve perceptually uniform masking, the dithering strategy must compensate for the projection's distortion. This line of reasoning suggests a \textit{Jacobian-weighted} approach: modulating the noise amplitude proportionally to the local distortion, in an attempt to match the noise energy to the magnified geometric error.
+    This non-uniformity invites a compelling question regarding signal processing: why does uniform noise in texture space yield high-quality masking on the sphere, despite the severe geometric distortion? Intuitively, one might assume that a uniform noise floor in texture space would result in non-uniform, ineffective masking on the sphere surface. This intuition would suggest a \textit{Jacobian-weighted} approach: modulating the noise amplitude proportionally to the local distortion to normalize the noise energy.
 
-    This paper refutes the utility of such density-corrected dithering strategies. We present a theoretical proof and experimental validation demonstrating that Uniform PDF Dithering in the texture domain remains the optimal strategy for masking quantization artifacts, regardless of the projection's non-linearity.
-    
-    Our analysis shows that because the projection operator transforms both the dithering noise and the quantization error identically, the signal-to-noise ratio (SNR) remains invariant under the mapping. We identify the ``Anisotropy Fallacy''—the mistaken belief that isotropic noise is desirable on the sphere surface. In reality, the quantization artifacts themselves are anisotropic (stretched) by the projection; thus, optimal masking requires the noise to undergo the exact same stretching. We conclude that standard uniform dithering naturally satisfies this requirement, rendering explicit Jacobian corrections computationally wasteful and visually detrimental.
+    This paper provides the formal mathematical proof for why such complexity is unnecessary. We utilize Anisotropic Jacobian-Weighted Dithering (AJWD) as a theoretical baseline to investigate the behavior of noise under non-conformal mappings. Our analysis demonstrates that Uniform PDF Dithering remains the optimal strategy because the projection operator transforms both the dithering noise and the quantization error identically. Consequently, the local Signal-to-Noise Ratio (SNR) remains invariant. We identify the ``Anisotropy Fallacy''—the mistaken belief that isotropic noise is desirable on the sphere surface—and show that standard uniform dithering naturally satisfies the requirement for covariant masking, rendering explicit corrections computationally wasteful.
 
 \section{Related Work}
 
@@ -145,8 +143,8 @@
     
     The quantized coordinate $\mathbf{u}_{quant}$ is then decoded back to a unit vector $\mathbf{n}_{decoded}$ for lighting calculations. This ``in-silico'' quantization allows us to instantly toggle between 8-bit, 10-bit, and 16-bit precision. Furthermore, because the simulation operates on floating-point bit-depths, we are able to sweep precision continuously (e.g., assessing transition artifacts at 9.5 bits) rather than being constrained to the integer steps of hardware formats.
     
-    \subsubsection{The ``Strawman'' Algorithm: Anisotropic Jacobian-Weighted Dithering (AJWD)}
-    To test the ``Anisotropy Fallacy,'' we implemented a novel, ostensibly ``corrected'' dithering algorithm: Anisotropic Jacobian-Weighted Dithering (AJWD). This algorithm represents the hypothesis that noise should be isotropic on the sphere surface $S^2$, and its energy should match the geometric error magnitude.
+    \subsubsection{The Theoretical Foil: Anisotropic Jacobian-Weighted Dithering (AJWD)}
+    To rigorously validate the robustness of standard dithering, we implemented a counter-factual algorithm: Anisotropic Jacobian-Weighted Dithering (AJWD). While not a standard industrial technique, AJWD serves as the rigorous embodiment of the "isotropic intuition"—the hypothesis that noise should be geometrically uniform on the sphere surface $S^2$.  
     
     In the AJWD mode, the shader computes the local Jacobian basis vectors to determine the primary axes of geometric stretch. The amplitude of the added noise $\mathbf{\eta}$ is then spatially modulated by the inverse of this stretch. Specifically, the algorithm identifies the principal axis of maximum geometric stretch. The noise amplitude along the minor axis is then boosted to match this maximum, ensuring that after the projection $\Phi^{-1}$ is applied, the noise footprint on the sphere remains circular. We contrast this against the standard baseline, where the noise amplitude is uniform across the texture domain $\Omega$.
 
@@ -173,8 +171,8 @@
 
 \section{Discussion}
 
-    Our results demonstrate a counter-intuitive but mathematically consistent reality: accounting for geometric distortion when dithering non-conformal projections is not only unnecessary but detrimental. This finding invites a broader discussion on why the "Jacobian intuition" fails in this specific context and how these findings integrate with modern temporal supersampling pipelines.
-
+    Our results demonstrate a counter-intuitive but mathematically consistent reality: accounting for geometric distortion when dithering non-conformal projections is unnecessary. This provides a formal justification for the industry's reliance on simple uniform noise. The "luck" of standard implementations is actually a property of linear approximation: the distortion acts as an automatic spatial modulator.
+    
     \subsection{The Intuition Trap: Integration vs. Masking}
     
     The hypothesis that dithering requires Jacobian weighting stems from a conflation of two distinct signal processing goals: \textit{energy preservation} (integration) and \textit{artifact masking} (quantization).
@@ -195,9 +193,9 @@
     
 \section{Conclusion}
 
-    Summarize the findings: Complexity does not equal Quality.
-
-    Final recommendation: Standard 16-bit Hemi-Oct with Uniform noise is the Pareto-optimal solution for G-Buffers.
+    We have presented a mathematical proof and experimental validation for the invariance of dithering efficiency under Hemi-Octahedral projection. By contrasting standard methods against a Jacobian-corrected theoretical model, we demonstrated that the projection operator preserves the local Signal-to-Noise Ratio by deforming both signal and noise identically.
+    
+    This finding resolves the apparent paradox of why uniform dithering works well on distorted maps: the geometric distortion is not a hindrance to masking, but a covariant feature. We conclude that the standard approach—16-bit Hemi-Oct with Uniform noise—is not just an engineering compromise, but the Pareto-optimal solution for G-Buffers.
 
 \section{References}
 
