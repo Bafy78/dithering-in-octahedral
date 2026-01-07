@@ -249,19 +249,20 @@
 
     \subsubsection{Quantitative Analysis (FSIM)}
 
-    To provide an objective metric for these perceptual observations, we computed the Feature Similarity Index (FSIM) for each sample against the 32-bit ground truth. FSIM was chosen specifically for its sensitivity to structural artifacts (Phase Congruency) over simple intensity differences.
+    To provide an objective metric for these perceptual observations, we computed the Feature Similarity Index (FSIM) for each sample against the 32-bit ground truth.
     
     Table \ref{tab:fsim_scores} summarizes the results, including a comparison between Rectangular (RPDF) and Triangular (TPDF) probability density functions.
     
     \begin{table}[ht]
         \centering
+        \renewcommand{\arraystretch}{1.2}
         \begin{tabular}{lccc}
         \hline
         \textbf{Method} & \textbf{Pole} & \textbf{Mid-Quadrant} & \textbf{Diagonal} \\ \hline
-        No Dither & 0,8859 & 0,8683 & 0,9149 \\
-        Uniform (RPDF) & 0,9357 & 0,9173 & 0,9463 \\
-        \textbf{Uniform (TPDF / Standard)} & \textbf{0,9176} & \textbf{0,8932} & \textbf{0,9314} \\
-        AJWD (Full) & 0,9176 & 0,8788 & 0,9199 \\ \hline
+        No Dither & 0.8859 & 0.8683 & 0.9149 \\
+        Uniform (RPDF) & 0.9357 & 0.9173 & 0.9463 \\
+        \textbf{Uniform (TPDF / Standard)} & \textbf{0.9176} & \textbf{0.8932} & \textbf{0.9314} \\
+        AJWD (Full) & 0.9176 & 0.8788 & 0.9199 \\ \hline
         \end{tabular}
         \caption{FSIM scores (Higher is Better). RPDF achieves the highest raw fidelity due to lower variance. Standard TPDF follows. AJWD (Full) scores significantly lower in distorted regions due to excessive texture grain}
         \label{tab:fsim_scores}
@@ -270,6 +271,18 @@
     It is important to interpret the FSIM scores in the context of signal variance. As observed in Table 1, TPDF dithering yields slightly lower FSIM scores than RPDF. This is an expected consequence of TPDF possessing twice the variance of RPDF. We accept this marginal quantitative penalty to eliminate the perceptual artifact of signal-dependent noise modulation.
 
     However, AJWD demonstrates a breakdown of this cost-benefit ratio. It incurs a significant FSIM penalty due to the Jacobian-weighted noise amplification, yet fails to achieve a higher structural similarity score than the Uniform baseline. This indicates that the additional energy injected by AJWD does not contribute to masking; it is purely 'wasted' variance. Unlike TPDF, which trades a small amount of score for a specific visual property (stationarity), AJWD sacrifices fidelity without bringing any improvement.
+
+    It is worth noting that at the Pole (Table \ref{tab:fsim_scores}, Column 1), the scores for Uniform TPDF and AJWD converge identically ($0.9176$). This serves as a validation of our implementation: in regions of minimal distortion, the Jacobian approaches the identity matrix, and the weighted strategy naturally collapses into standard uniform dithering. The divergence in scores is strictly confined to regions where the anisotropic projection is active.
+
+    While the visual results focus on the 8-bit worst-case scenario to maximize artifact visibility, the relative performance remains invariant at higher precisions. At 10-bit, Uniform TPDF maintains its lead in the Diagonal region (FSIM 0.981 vs AJWD 0.979), confirming that the geometric efficiency of uniform dithering is independent of the quantization step size $\Delta$. At higher bit-depths, while the absolute magnitude of artifacts diminishes, the Efficiency Ratio $R(\mathbf{u})$ remains invariant.
+
+    \subsubsection{Computational Cost and Performance}
+
+    In addition to visual quality, we evaluated the execution cost of the proposed strategies. While standard uniform dithering requires only a single scalar addition, the AJWD strategy proves prohibitively expensive for real-time applications. 
+    
+    Our implementation utilized analytic partial derivatives of the projection operator rather than screen-space hardware gradients. A static analysis of the generated shader assembly reveals that the Jacobian weighting logic adds approximately \textbf{54 ALU instructions}, including expensive transcendental operations (square roots and reciprocal divisions).
+    
+    Given that the standard Hemi-Octahedral encoding requires fewer than 20 instructions, AJWD increases the total cost of the quantization pass by roughly \textbf{300\%}. Since this threefold increase in cost yields strictly lower FSIM scores, AJWD represents a dominated strategy in terms of cost-benefit.
 
 \section{Discussion}
 
