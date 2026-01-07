@@ -1,7 +1,7 @@
 \documentclass{article}
 \usepackage{graphicx}
 \graphicspath{ {./images/} }
-\usepackage[a4paper, total={6in, 10in}]{geometry}
+\usepackage[a4paper, total={16cm, 26cm}]{geometry}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{amssymb}
@@ -186,12 +186,12 @@
     
     To validate the masking efficiency, we employed standard Blue Noise. Crucially, we enforced a Triangular Probability Density Function (TPDF) by subtracting decorrelated samples (obtained via spatial offsetting) to generate the 2D offset vector. This ensures a constant noise floor and eliminates amplitude modulation, isolating the geometric projection $\Phi$ as the sole variable governing artifact visibility. While our experiments utilized Blue Noise~\cite{peters2016}, the geometric invariance identified in Eq. (3) applies universally to any noise distribution (e.g., White Noise, IGN).
 
-    We also evaluated scalar Jacobian-Weighted Dithering (scaling isotropic noise amplitude by $\mathbf{J}(\mathbf{u})$. This method yielded strictly inferior results, producing excessive noise in high-distortion regions without improving masking efficiency, and was thus excluded from the detailed comparison.
+    We also evaluated scalar Jacobian-Weighted Dithering (scaling isotropic noise amplitude by $\mathbf{J}(\mathbf{u})$). This method yielded strictly inferior results, producing excessive noise in high-distortion regions without improving masking efficiency, and was thus excluded from the detailed comparison.
     
     \subsubsection{Data Acquisition and Metric Evaluation}
     To ensure consistent objective evaluation using the FSIM metric, we implemented an automated capture system. Because the specular highlight moves relative to the view vector, a static crop would introduce framing bias. We developed a parallax-corrected cropping algorithm that iteratively solves for the surface point $\mathbf{p}$ where the reflection vector aligns with the camera. We found that a simple 3-pass convergence loop was sufficient to align the crop window with the specular highlight to sub-pixel accuracy, ensuring that the FSIM metric evaluated quantization noise rather than misalignment discrepancies. 
     
-    For every combination of encoding (Cartesian vs. Hemi-Oct), dithering strategy (Uniform vs. AJWD), and bit-depth, the system renders and exports a $256 \times 256$ image of the highlight. These samples are then compared against a ``Ground Truth'' render (unquantized 32-bit float normals) using an offline Python script to compute the FSIM indices presented in Section 4.2.
+    For every combination of encoding (Cartesian vs. Hemi-Oct), dithering strategy (Uniform vs. AJWD), and bit-depth, the system renders and exports an image of the highlight. These samples are then compared against a ``Ground Truth'' render (unquantized 32-bit float normals) using an offline Python script to compute the FSIM indices presented in Section 4.2.
 
 \subsection{Results and Evaluation}
 
