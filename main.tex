@@ -2,11 +2,15 @@
 \usepackage{graphicx}
 \graphicspath{ {./images/} }
 \usepackage[a4paper, total={6in, 10in}]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
 \usepackage{amssymb}
 \usepackage{amsmath}
 \usepackage{hyperref}
 \usepackage{parskip}
 \usepackage{bm}
+\usepackage{array}
+\usepackage[export]{adjustbox}
 
 \title{The Invariance of Dithering Efficiency Under Non-Conformal Projections: A Case Study on Octahedral Normal Maps}
 \author{Rémi Millerat-{}-Gallot}
@@ -165,6 +169,8 @@
     Crucially, to ensure the Jacobian weighting was theoretically ideal and free from screen-space aliasing, we did not rely on hardware derivatives (\texttt{ddx}/\texttt{ddy}). Instead, we implemented the exact \textit{analytic partial derivatives} of the Hemi-Octahedral mapping in the shader. The surface gradients $\frac{\partial \Phi}{\partial u}$ and $\frac{\partial \Phi}{\partial v}$ were computed explicitly from the $L_1$ norm definition, ensuring precise measurement of the local stretch even at low resolutions.
     
     To validate the masking efficiency, we employed standard Blue Noise. Crucially, we enforced a Triangular Probability Density Function (TPDF) by subtracting decorrelated samples (obtained via spatial offsetting) to generate the 2D offset vector. This ensures a constant noise floor and eliminates amplitude modulation, isolating the geometric projection $\Phi$ as the sole variable governing artifact visibility. While our experiments utilized Blue Noise~\cite{peters2016}, the geometric invariance identified in Eq. (3) applies universally to any noise distribution (e.g., White Noise, IGN).
+
+    We also evaluated scalar Jacobian-Weighted Dithering (scaling isotropic noise amplitude by $\mathbf{J}(\mathbf{u})$. This method yielded strictly inferior results, producing excessive noise in high-distortion regions without improving masking efficiency, and was thus excluded from the detailed comparison.
     
     \subsubsection{Data Acquisition and Metric Evaluation}
     To ensure consistent objective evaluation using the FSIM metric, we implemented an automated capture system. Because the specular highlight moves relative to the view vector, a static crop would introduce framing bias. We developed a parallax-corrected cropping algorithm that iteratively solves for the surface point $\mathbf{p}$ where the reflection vector aligns with the camera. We found that a simple 3-pass convergence loop was sufficient to align the crop window with the specular highlight to sub-pixel accuracy, ensuring that the FSIM metric evaluated quantization noise rather than misalignment discrepancies. 
@@ -173,14 +179,98 @@
 
 \subsection{Results and Evaluation}
 
-    Visual Inspection (The Artifact Grid)
+    \subsubsection{Visual Inspection: The Artifact Grid}
     
-    Compare the max distortion places vs. min distortion places.
+    \begin{figure}[ht]
+        \centering
+        \setlength{\tabcolsep}{0pt} 
+        % --- Local helper command for 50% center zoom ---
+        \newcommand{\zoomimg}[1]{%
+            \adjincludegraphics[
+                width=0.185\textwidth, 
+                trim={.3\width} {.3\height} {.3\width} {.3\height}, 
+                clip,
+            valign=m
+            ]{#1}%
+        }
+        
+        \begin{tabular}{c c c c c c}
+            % --- COLUMN HEADERS ---
+            & \footnotesize Ground Truth
+            & \footnotesize No Dither 
+            & \footnotesize Uniform 
+            & \footnotesize AJWD 
+            & \footnotesize AJWD ($0.6\times$) \\
+    
+            % --- ROW 1: POLE ---
+            \rotatebox[origin=c]{90}{\footnotesize \textbf{Pole}} &
+            \zoomimg{pole_gt} &
+            \zoomimg{pole_no_dither} &
+            \zoomimg{pole_uniform} &
+            \zoomimg{pole_ajwd_full} \\
+    
+            % --- ROW 2: MID-QUADRANT ---
+            \rotatebox[origin=c]{90}{\footnotesize \textbf{Mid-Quad}} &
+            \zoomimg{mid_gt} &
+            \zoomimg{mid_no_dither} &
+            \zoomimg{mid_uniform} &
+            \zoomimg{mid_ajwd_full} &
+            \zoomimg{mid_ajwd_norm} \\
+    
+            % --- ROW 3: DIAGONAL ---
+            \rotatebox[origin=c]{90}{\footnotesize \textbf{Diagonal}} &
+            \zoomimg{diag_gt} &
+            \zoomimg{diag_no_dither} &
+            \zoomimg{diag_uniform} &
+            \zoomimg{diag_ajwd_full} &
+            \zoomimg{diag_ajwd_norm} \\
+            
+        \end{tabular}
+        
+        \caption{Visual artifact comparison at 8-bit precision. \textbf{Rows:} Regions of varying distortion. \textbf{Columns:} Different type of dithering strategies vs Ground Truth.}
+        \label{fig:artifact_grid}
+    \end{figure}
+    
+    To isolate the perceptual impact of the dithering strategies, we captured high-dynamic-range crops of the specular highlight in three critical regions: the Pole (minimal distortion), the Mid-Quadrants (maximum density loss), and the Diagonal (maximum anisotropy). Figure \ref{fig:artifact_grid} presents these regions across five distinct modes, including a Ground Truth baseline.
+    
+    \textbf{Energy Normalization and the 0.6x Factor}
+    A direct comparison is complicated by the fact that AJWD boosts noise amplitude to correct for distortion. To prevent AJWD from simply overpowering the signal with excessive energy, we introduced a "Normalized" condition (Column 5). We empirically lowered the global amplitude to $0.6\times$ so that the noise level along the \textit{boosted} axis (the direction of correction) roughly matched the baseline intensity of the Uniform approach. This setup isolates the geometric trade-off: by clamping the maximum noise visibility to standard levels, we expose whether the un-boosted axis retains enough energy to mask the quantization steps.    
+    
+    \textbf{Analysis of Failure Modes}
+    The results reveal a clear dichotomy between geometric intent and perceptual reality:
+    
+    \begin{enumerate}
+        \item \textbf{The Efficiency of Uniformity (Column 3):} Across all regions, standard Uniform dithering proves robust. Even in the Mid-Quadrants, where the Jacobian determinant peaks ($J \approx 2.6$) and precision density is lowest, the projection operator naturally scales the noise in exact proportion to the widened quantization steps. In the high-anisotropy Diagonal region, the noise is stretched into elongated streaks that perfectly overlay the quantization banding, effectively masking artifacts without requiring parameter tuning.
+    
+        \item \textbf{The Cost of Isotropy (Column 4):} Full-amplitude AJWD successfully masks artifacts but at the cost of excessive texture grain. In the Diagonal region, the algorithm forces the noise footprint to be circular despite the underlying error being highly anisotropic. This results in higher visible noise than the uniform version for no visual gain.
+    
+        \item \textbf{The Geometric Mismatch (Column 5):} The failure of the isotropic hypothesis is most evident in the Normalized ($0.6\times$) AJWD case. When the energy budget is constrained to match the standard approach, the isotropic shape becomes a liability. In both the Mid-Quadrant and Diagonal regions, the circular noise kernel is geometrically insufficient to span the major axis of the projected quantization step ("under-dithering"). Consequently, clear banding artifacts re-emerge, proving that masking power depends on covariant alignment, not just noise amplitude.
+    \end{enumerate}
 
-    Demonstrate that AJWD exposes simply adds way too much noise, or, if we reduce the amplitude manually, doesn't add enough in one axis.
+    \subsubsection{Quantitative Analysis (FSIM)}
 
-    FSIM Error Maps: Heatmaps showing perceptual failure points. Expectation: Uniform Dithering has a lower mean FSIM score than AJWD.
+    To provide an objective metric for these perceptual observations, we computed the Feature Similarity Index (FSIM) for each sample against the 32-bit ground truth. FSIM was chosen specifically for its sensitivity to structural artifacts (Phase Congruency) over simple intensity differences.
+    
+    Table \ref{tab:fsim_scores} summarizes the results, including a comparison between Rectangular (RPDF) and Triangular (TPDF) probability density functions.
+    
+    \begin{table}[ht]
+        \centering
+        \begin{tabular}{lccc}
+        \hline
+        \textbf{Method} & \textbf{Pole} & \textbf{Mid-Quadrant} & \textbf{Diagonal} \\ \hline
+        No Dither & 0,8859 & 0,8683 & 0,9149 \\
+        Uniform (RPDF) & 0,9357 & 0,9173 & 0,9463 \\
+        \textbf{Uniform (TPDF / Standard)} & \textbf{0,9176} & \textbf{0,8932} & \textbf{0,9314} \\
+        AJWD (Full) & 0,9176 & 0,8788 & 0,9199 \\ \hline
+        \end{tabular}
+        \caption{FSIM scores (Higher is Better). RPDF achieves the highest raw fidelity due to lower variance. Standard TPDF follows. AJWD (Full) scores significantly lower in distorted regions due to excessive texture grain}
+        \label{tab:fsim_scores}
+    \end{table}
 
+    It is important to interpret the FSIM scores in the context of signal variance. As observed in Table 1, TPDF dithering yields slightly lower FSIM scores than RPDF. This is an expected consequence of TPDF possessing twice the variance of RPDF. We accept this marginal quantitative penalty to eliminate the perceptual artifact of signal-dependent noise modulation.
+
+    However, AJWD demonstrates a breakdown of this cost-benefit ratio. It incurs a significant FSIM penalty due to the Jacobian-weighted noise amplification, yet fails to achieve a higher structural similarity score than the Uniform baseline. This indicates that the additional energy injected by AJWD does not contribute to masking; it is purely 'wasted' variance. Unlike TPDF, which trades a small amount of score for a specific visual property (stationarity), AJWD sacrifices fidelity without bringing any improvement.
+    
     ALU cost comparison. Show that calculating det(J) or partial derivatives adds significant shader overhead ( 10-15 instructions) for negative visual gain.
 
 \section{Discussion}
