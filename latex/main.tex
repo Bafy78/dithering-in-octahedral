@@ -7,13 +7,26 @@
 \usepackage{amssymb}
 \usepackage{amsmath}
 \usepackage{hyperref}
+\hypersetup{
+    pdfborder={0 0 0},
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue,
+    pdftitle={The Invariance of Dithering Efficiency Under Non-Conformal Projections},
+    pdfauthor={Rémi Millerat-{}-Gallot}
+}
 \usepackage{parskip}
 \usepackage{bm}
 \usepackage{array}
 \usepackage[export]{adjustbox}
 
 \title{The Invariance of Dithering Efficiency Under Non-Conformal Projections: A Case Study on Octahedral Normal Maps}
-\author{Rémi Millerat-{}-Gallot}
+\author{
+  Rémi Millerat-{}-Gallot \\
+  \texttt{remi.millerat--gallot@universite-paris-saclay.fr} \\
+  \textit{Master's student at UPSaclay}
+}
 \date{January 2026}
 
 \begin{document}
@@ -23,6 +36,9 @@
 \begin{abstract}
     Octahedral encoding, standard for normal map compression, significantly distorts surface density, yet uniform dithering remains the industry default. This paper provides a mathematical proof for the invariance of dithering efficiency under such non-conformal projections. By contrasting standard methods against a Jacobian-weighted theoretical foil, we demonstrate that explicit density correction is mathematically redundant. Our analysis reveals that the projection transforms both dithering noise and quantization error identically. We conclude that standard spatially uniform dithering is the theoretically optimal strategy for masking quantization artifacts.
 \end{abstract}
+
+\vspace{0.5cm}
+\noindent \textbf{Keywords:} Real-time Rendering, Octahedral Encoding, Dithering, Quantization, Normal Mapping, WebGPU
 
 \section{Introduction}
 
@@ -150,10 +166,12 @@
 
     To empirically validate the theoretical invariance proposed in Section 3, we developed a custom high-precision rendering framework using the WebGPU API and Three.js. The testing environment is designed to isolate quantization artifacts from other sources of error (such as geometric aliasing or texture filtering) and to provide a ``stress test'' scenario where normal precision is the sole determinant of visual quality.
     
+    The WebGPU simulation framework and full source code are available at: \url{https://github.com/Bafy78/dithering-in-octahedral}
+    
     \subsubsection{Rendering Pipeline and Stress Test Configuration}
     The test scene consists of a highly tessellated sphere ($256 \times 256$ segments) to ensure that vertex interpolation artifacts remain negligible compared to pixel-stage quantization errors. We employ a Blinn-Phong specular model~\cite{blinn1977} with a high exponent to simulate a low-roughness material (perceptual roughness $r \approx 0.15$, mapping to a Blinn-Phong exponent of $s \approx 4000$). This configuration serves as the worst-case scenario for normal mapping: narrow specular highlights act as high-frequency amplifiers for low-frequency quantization steps, rendering ``banding'' artifacts immediately visible to the human eye.
     
-    The quantization pipeline is implemented in a custom WGSL fragment shader. Instead of relying on hardware texture formats (which offer fixed precision), we simulate arbitrary bit-depths programmatically. The high-precision view-space normal $\mathbf{n}_{view}$ is projected into the Hemi-Octahedral domain $\Omega$, resulting in continuous UV coordinates. We then apply dithering noise $\bm{\eta}$ and round the signal to simulating $k$-bit fixed-point storage:
+    The quantization pipeline is implemented in a custom WGSL fragment shader. Instead of relying on hardware texture formats (which offer fixed precision), we simulate arbitrary bit-depths programmatically. The high-precision view-space normal $\mathbf{n}_{view}$ is projected into the Hemi-Octahedral domain $\Omega$, resulting in continuous UV coordinates. We then apply dithering noise $\bm{\eta}$ and round the signal to simulate $k$-bit fixed-point storage:
     
     \begin{equation}
         \mathbf{u}_{quant} = \frac{\operatorname{round}(\frac{\Phi^{-1}(\mathbf{n}_{view})+1}{2} \cdot (2^k - 1)  + \bm{\eta})}{2^k - 1}
@@ -300,7 +318,7 @@
 
     We have presented a mathematical proof and experimental validation for the invariance of dithering efficiency under Hemi-Octahedral projection. By contrasting standard methods against a Jacobian-corrected theoretical model, we demonstrated that the projection operator preserves the local Masking Ratio by deforming both signal and noise identically.
     
-    This finding resolves the apparent paradox of why uniform dithering works well on distorted maps: the geometric distortion is not a hindrance to masking, but a covariant feature. We conclude that the standard approach---16-bit Hemi-Oct with Uniform noise---is not just an engineering compromise, but the Pareto-optimal solution for G-Buffers.
+    This finding resolves the apparent paradox of why uniform dithering works well on distorted maps: the geometric distortion is not a hindrance to masking, but a covariant feature. We conclude that the standard approach---16-bit Hemi-Octahedral with Uniform noise---is not just an engineering compromise, but the Pareto-optimal solution for G-Buffers.
 
 \begin{thebibliography}{99}
     \bibitem{blinn1978}
@@ -349,12 +367,12 @@
 
     \bibitem{peters2016}
     Peters, C. (2016).
-    Free Blue Noise Textures.
+    Free blue noise textures.
     \textit{Moments in Graphics}. Available at: \url{http://momentsingraphics.de/BlueNoise.html}
 
     \bibitem{karis2014}
     Karis, B. (2014).
-    High Quality Temporal Supersampling.
+    High quality temporal supersampling.
     \textit{SIGGRAPH 2014 Advances in Real-Time Rendering in Games Course}.
     Available at: \url{http://de45xmedrsdbp.cloudfront.net/Resources/files/TemporalAA_small-59732822.pdf}
 \end{thebibliography}
