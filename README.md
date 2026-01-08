@@ -1,5 +1,11 @@
 # The Invariance of Dithering Efficiency Under Non-Conformal Projections
 
+[![Deploy Status](https://github.com/bafy78/dithering-in-octahedral/actions/workflows/deploy.yml/badge.svg)](https://github.com/bafy78/dithering-in-octahedral/actions)
+[![Live Demo](https://img.shields.io/badge/WebGPU-Live%20Simulation-FF4088?logo=googlechrome&logoColor=white)](https://bafy78.github.io/dithering-in-octahedral/)
+[![Paper](https://img.shields.io/badge/Paper-PDF-b31b1b?logo=adobe-acrobat-reader&logoColor=white)](./dithering_in_octahedral.pdf)
+[![License: MIT](https://img.shields.io/badge/Code%20License-MIT-yellow.svg)](./LICENSE)
+[![License: CC BY-SA 4.0](https://img.shields.io/badge/Paper%20License-CC%20BY--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-sa/4.0/)
+
 > **Context:** This repository contains the source code, simulation framework, and LaTeX compilation for a research paper produced during the **"Fast-Track to Research Writing"** workshop at  Université Paris-Saclay (Nov 2025 – Jan 2026).
 
 ![Artifact Comparison](./latex/images/hemi_oct_distortion_plot.png)
