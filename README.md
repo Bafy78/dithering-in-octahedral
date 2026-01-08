@@ -77,7 +77,7 @@ DITHERING-IN-OCTAHEDRAL/
     npx vite
     ```
 
-3. Open `http://localhost:5147` in your browser.
+3. Open `http://localhost:5173/dithering-in-octahedral/` in your browser.
 
 ### Reproducing Plots
 

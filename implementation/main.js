@@ -3,7 +3,7 @@ import { wgslFn, normalView, positionView, vec3, vec2, uniform, mix, step, abs, 
 import * as WEBGPU from 'three/webgpu';
 import GUI from 'three/examples/jsm/libs/lil-gui.module.min.js';
 import encodingShaderCode from './encoding.wgsl?raw';
-
+import blueNoiseUrl from './blue_noise_64.png';
 
 // --- 1. BOILERPLATE ---
 const scene = new THREE.Scene();
@@ -47,7 +47,7 @@ const V_view = positionView.negate().normalize();
 
 // Load blue noise texture
 const loader = new THREE.TextureLoader();
-const blueNoiseMap = loader.load('./blue_noise_64.png');
+const blueNoiseMap = loader.load(blueNoiseUrl);
 blueNoiseMap.wrapS = THREE.RepeatWrapping;
 blueNoiseMap.wrapT = THREE.RepeatWrapping;
 blueNoiseMap.minFilter = THREE.NearestFilter;
