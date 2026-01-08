@@ -2,7 +2,7 @@ name: Deploy WebGPU Sim to Pages
 
 on:
   push:
-    branches: ["deployment"]
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
